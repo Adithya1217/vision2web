@@ -71,6 +71,7 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
   const [out, setOut] = useState<Interpretation | null>(null);
   const [done, setDone] = useState<DoneStep[] | null>(null);
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const recRef = useRef<Recognition | null>(null);
   // A draft created before its post failed: retrying posts it instead of creating a second draft.
   const draftRef = useRef<{ id: number; grand_total: string } | null>(null);
@@ -79,6 +80,26 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
 
   const speechSupported =
     typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  // Text-to-speech: reads a message aloud; a new message interrupts the previous one.
+  const speak = (message: string) => {
+    if (!ttsSupported || !message.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.lang = "en-IN";
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if (!ttsSupported) return;
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
+  };
 
   const interpret = async (value = text) => {
     if (!value.trim()) return;
@@ -182,5 +203,8 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
     setError(null);
   };
 
-  return { text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm, reset };
+  return {
+    text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm, reset,
+    speaking, ttsSupported, speak, stopSpeaking,
+  };
 }

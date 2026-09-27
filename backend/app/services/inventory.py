@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable
 from decimal import Decimal
 
@@ -7,10 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import Ctx
 from app.core.errors import Conflict, InsufficientStock, NotFound, ValidationFailed
-from app.enums import MovementType
-from app.models import Category, Product, StockMovement
+from app.enums import MovementType, Role
+from app.models import Category, Product, StockMovement, User
 from app.schemas.catalog import ProductCreate, ProductUpdate, StockAdjustmentIn
 from app.services.common import get_scoped
+from app.services.email import send_email
+
+logger = logging.getLogger(__name__)
 
 
 def lock_products(db: Session, shop_id: int, product_ids: Iterable[int]) -> dict[int, Product]:
@@ -31,6 +35,47 @@ def lock_products(db: Session, shop_id: int, product_ids: Iterable[int]) -> dict
     return found
 
 
+def _send_stock_alert(db: Session, product: Product, old_qty: int, new_qty: int) -> None:
+    """Email owners and managers when a product crosses into low-stock or out-of-stock status."""
+    alert_type: str | None = None
+    if old_qty > 0 and new_qty == 0:
+        alert_type = "Out of Stock"
+    elif old_qty > product.low_stock_threshold and 0 < new_qty <= product.low_stock_threshold:
+        alert_type = "Low Stock"
+    if alert_type is None:
+        return
+
+    recipients = db.scalars(
+        select(User.email).where(
+            User.shop_id == product.shop_id,
+            User.role.in_([Role.owner, Role.manager]),
+            User.is_active.is_(True),
+        )
+    ).all()
+    if not recipients:
+        return
+
+    subject = f"{alert_type} Alert: {product.name}"
+    if alert_type == "Out of Stock":
+        body = (
+            f"Stock Alert\n\nProduct: {product.name}\nSKU: {product.sku}\nCurrent quantity: {new_qty}\n"
+            f"Status: Out of Stock\n\nPlease restock this product."
+        )
+    else:
+        body = (
+            f"Stock Alert\n\nProduct: {product.name}\nSKU: {product.sku}\nCurrent quantity: {new_qty}\n"
+            f"Low-stock threshold: {product.low_stock_threshold}\nStatus: Low Stock\n\n"
+            f"Please consider restocking this product."
+        )
+
+    for recipient in recipients:
+        try:
+            send_email(recipient=recipient, subject=subject, body=body)
+        except Exception:
+            # Email failure must not break the stock operation.
+            logger.exception("Failed to send stock alert email to %s for product %s", recipient, product.id)
+
+
 def apply_movement(
     db: Session,
     product: Product,
@@ -46,7 +91,8 @@ def apply_movement(
     """Change stock of an already-locked product and append the matching immutable movement."""
     if delta == 0:
         raise ValidationFailed("stock movement must change the quantity")
-    new_qty = product.quantity + delta
+    old_qty = product.quantity
+    new_qty = old_qty + delta
     if new_qty < 0:
         raise InsufficientStock(
             f"insufficient stock for {product.sku}: available {product.quantity}, requested {-delta}",
@@ -67,6 +113,7 @@ def apply_movement(
         created_by=user_id,
     )
     db.add(movement)
+    _send_stock_alert(db, product, old_qty, new_qty)
     return movement
 
 

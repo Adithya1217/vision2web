@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5"
 
+    # Stock alert emails via Resend. Unset key = alerts are skipped.
+    resend_api_key: str = ""
+    resend_from: str = "onboarding@resend.dev"
+
     @field_validator("database_url")
     @classmethod
     def _psycopg_driver(cls, url: str) -> str:

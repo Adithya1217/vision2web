@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Mic, MicOff, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Mic, MicOff, Send, ShieldCheck, Sparkles, Volume2, VolumeX } from "lucide-react";
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { useToast } from "@/components/toast";
 import { Badge, Button, ErrorBanner, Input, Modal } from "@/components/ui";
@@ -20,11 +21,29 @@ const EXAMPLES = [
 
 export function CommandBar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const toast = useToast();
-  const { text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm, reset } =
-    useAssistant({ onDone: (title) => toast(title + " — done") });
+  const a = useAssistant({
+    onDone: (title) => {
+      toast(title + " — done");
+      a.speak(title + " — done");
+    },
+  });
+  const { text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm } = a;
+  const { speaking, ttsSupported, speak, stopSpeaking } = a;
+
+  // Read each new answer aloud.
+  useEffect(() => {
+    if (out?.message) speak(out.message);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- speak only when a new answer arrives
+  }, [out]);
+
+  const reset = () => {
+    stopSpeaking();
+    a.reset();
+  };
 
   const close = () => {
     stopListening();
+    stopSpeaking();
     onClose();
   };
 
@@ -45,8 +64,19 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
           aria-label="Command"
         />
         {speechSupported && (
-          <Button type="button" onClick={() => listen()} aria-label={listening ? "Stop listening" : "Speak a command"} variant={listening ? "danger" : "secondary"}>
+          <Button type="button" onClick={() => { stopSpeaking(); listen(); }} aria-label={listening ? "Stop listening" : "Speak a command"} variant={listening ? "danger" : "secondary"}>
             {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
+        )}
+        {ttsSupported && (
+          <Button
+            type="button"
+            onClick={() => (speaking ? stopSpeaking() : out?.message && speak(out.message))}
+            aria-label={speaking ? "Stop speaking" : "Read response aloud"}
+            variant={speaking ? "danger" : "secondary"}
+            disabled={!out?.message}
+          >
+            {speaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
         )}
         <Button type="submit" variant="primary" loading={busy && !out} aria-label="Run">
