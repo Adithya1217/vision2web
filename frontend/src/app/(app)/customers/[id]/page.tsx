@@ -150,9 +150,9 @@ export default function CustomerLedgerPage() {
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <Card className="p-4">
-      <p className="text-xs text-ink-3">{label}</p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
-      {note && <p className="text-xs text-ink-3">{note}</p>}
+      <p className="font-mono text-xs font-semibold uppercase tracking-[0.04em] text-ink-2">{label}</p>
+      <p className="mt-3 truncate font-pixel text-xs leading-7 sm:text-base">{value}</p>
+      {note && <p className="mt-1 font-mono text-xs text-ink-3">{note}</p>}
     </Card>
   );
 }

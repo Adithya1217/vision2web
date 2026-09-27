@@ -18,12 +18,13 @@ export const Button = forwardRef<
       ref={ref}
       disabled={disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-1.5 rounded-sm font-mono font-semibold disabled:cursor-not-allowed disabled:opacity-60",
         size === "sm" ? "h-8 px-2.5 text-xs" : "h-9 px-3.5 text-sm",
-        variant === "primary" && "bg-accent text-accent-ink hover:brightness-110",
-        variant === "secondary" && "border border-line bg-surface text-ink hover:bg-surface-2",
-        variant === "ghost" && "text-ink-2 hover:bg-surface-2 hover:text-ink",
-        variant === "danger" && "bg-critical text-white hover:brightness-110",
+        variant !== "ghost" && "px-press border-2 border-line-strong disabled:hatch",
+        variant === "primary" && "bg-butter text-on-pastel",
+        variant === "secondary" && "bg-surface text-ink hover:bg-lavender-soft",
+        variant === "ghost" && "text-ink-2 hover:bg-lavender-soft hover:text-ink disabled:hover:bg-transparent",
+        variant === "danger" && "bg-pink text-on-pastel",
         className,
       )}
       {...rest}
@@ -35,26 +36,29 @@ export const Button = forwardRef<
 });
 
 // ------------------------------------------------------------------ form fields
+// Full width by default; a caller's own width class (w-auto, sm:w-64…) replaces it rather than fighting it.
+const fieldWidth = (className?: string) => (/(^|\s|:)w-/.test(className ?? "") ? className : clsx("w-full", className));
+
 const fieldClass =
-  "h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-60";
+  "h-9 rounded-sm border-2 border-line-strong bg-surface px-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-3 focus:shadow-sm disabled:border-dashed disabled:opacity-60";
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={clsx(fieldClass, className)} {...rest} />;
+  return <input ref={ref} className={clsx(fieldClass, fieldWidth(className))} {...rest} />;
 });
 
 export function Select({ className, children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={clsx(fieldClass, "pr-8", className)} {...rest}>
+    <select className={clsx(fieldClass, "pr-8", fieldWidth(className))} {...rest}>
       {children}
     </select>
   );
 }
 
 export function Textarea({ className, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={clsx(fieldClass, "h-auto min-h-20 py-2", className)} {...rest} />;
+  return <textarea className={clsx(fieldClass, "h-auto min-h-20 py-2", fieldWidth(className))} {...rest} />;
 }
 
 export function Field({
@@ -73,7 +77,7 @@ export function Field({
   const id = useId();
   return (
     <div className={clsx("flex flex-col gap-1", className)}>
-      <label htmlFor={id} className="text-xs font-medium text-ink-2">
+      <label htmlFor={id} className="text-[13px] font-semibold leading-4 text-ink">
         {label}
       </label>
       {children(id)}
@@ -89,7 +93,7 @@ export function Field({
 // ------------------------------------------------------------------ layout
 export function Card({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={clsx("rounded-xl border border-line bg-surface", className)} {...rest}>
+    <div className={clsx("border-[3px] border-line-strong bg-surface shadow-md", className)} {...rest}>
       {children}
     </div>
   );
@@ -97,10 +101,10 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
 
 export function CardHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-4 py-3">
+    <div className="flex flex-wrap items-start justify-between gap-2 border-b-[3px] border-line-strong px-4 py-3">
       <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
+        <h2 className="font-pixel text-xs leading-4 tracking-[0.02em]">{title}</h2>
+        {subtitle && <p className="mt-1 font-mono text-xs text-ink-3">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
@@ -119,7 +123,7 @@ export function PageHeader({
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="font-pixel text-lg leading-8 sm:text-2xl">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-ink-2">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -128,10 +132,16 @@ export function PageHeader({
 }
 
 // ------------------------------------------------------------------ feedback
-export function Spinner({ label = "Loading" }: { label?: string }) {
+export function Sprite({ name, size = 12, className }: { name: "crate" | "alert" | "check" | "cross" | "sparkle"; size?: number; className?: string }) {
+  // Sprites are 12x12 pixel art: render at multiples of 12 so pixels stay square.
+  // eslint-disable-next-line @next/next/no-img-element -- tiny static SVG, no optimisation needed
+  return <img src={`/sprites/${name}.svg`} width={size} height={size} alt="" aria-hidden className={clsx("sprite inline-block shrink-0", className)} />;
+}
+
+export function Spinner({ label = "Counting shelves" }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-10 text-sm text-ink-3" role="status">
-      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+    <div className="flex items-center justify-center gap-2 py-10 font-mono text-sm text-ink-3" role="status">
+      <Sprite name="crate" size={24} className="animate-bounce" />
       {label}…
     </div>
   );
@@ -144,7 +154,7 @@ export function ErrorBanner({ error, className }: { error: unknown; className?: 
     <div
       role="alert"
       className={clsx(
-        "flex items-start gap-2 rounded-lg border border-critical/30 bg-critical/5 px-3 py-2 text-sm text-critical-ink",
+        "flex items-start gap-2 rounded-sm border-2 border-line-strong bg-pink-soft px-3 py-2 text-sm text-critical-ink",
         className,
       )}
     >
@@ -157,7 +167,8 @@ export function ErrorBanner({ error, className }: { error: unknown; className?: 
 export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-      <p className="text-sm font-medium">{title}</p>
+      <Sprite name="crate" size={48} />
+      <p className="text-sm font-semibold">{title}</p>
       {hint && <p className="max-w-sm text-sm text-ink-3">{hint}</p>}
       {action}
     </div>
@@ -169,12 +180,12 @@ export function Badge({ tone = "neutral", children }: { tone?: Tone; children: R
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
-        tone === "neutral" && "bg-surface-2 text-ink-2",
-        tone === "good" && "bg-good/10 text-good-ink",
-        tone === "warning" && "bg-warning/15 text-warning-ink",
-        tone === "critical" && "bg-critical/10 text-critical-ink",
-        tone === "info" && "bg-accent-soft text-accent",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-sm border-2 border-line-strong px-1.5 py-px font-mono text-[11px] font-semibold uppercase tracking-[0.04em]",
+        tone === "neutral" && "bg-surface-2 text-ink",
+        tone === "good" && "bg-mint text-on-pastel",
+        tone === "warning" && "bg-pink text-on-pastel",
+        tone === "critical" && "bg-ink text-page",
+        tone === "info" && "bg-sky text-on-pastel",
       )}
     >
       {children}
@@ -195,7 +206,7 @@ export function Th({ children, className, ...rest }: React.ThHTMLAttributes<HTML
   return (
     <th
       className={clsx(
-        "whitespace-nowrap border-b border-line px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-3",
+        "whitespace-nowrap border-b-2 border-line-strong bg-surface-2 px-3 py-2 text-left font-mono text-xs font-semibold uppercase tracking-[0.04em] text-ink",
         className,
       )}
       {...rest}
@@ -228,7 +239,7 @@ export function Pagination({
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
   return (
-    <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-xs text-ink-3">
+    <div className="flex items-center justify-between gap-2 px-3 py-2.5 font-mono text-xs text-ink-3">
       <span className="tabular">
         {from}–{to} of {total}
       </span>
@@ -282,7 +293,7 @@ export function Modal({
   }, [open]);
   if (!open) return null;
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={onClose}>
+    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-[var(--overlay)] sm:items-center sm:p-4" onMouseDown={onClose}>
       <div
         ref={ref}
         role="dialog"
@@ -290,20 +301,20 @@ export function Modal({
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
         className={clsx(
-          "flex max-h-[92vh] w-full flex-col rounded-t-2xl border border-line bg-surface shadow-xl sm:rounded-2xl",
+          "flex max-h-[92vh] w-full flex-col border-[3px] border-line-strong bg-surface shadow-xl",
           wide ? "sm:max-w-3xl" : "sm:max-w-lg",
         )}
       >
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="rounded p-1 text-ink-3 hover:bg-surface-2 hover:text-ink" aria-label="Close">
+        <div className="flex items-center justify-between border-b-[3px] border-line-strong bg-lavender px-4 py-3 text-on-pastel">
+          <h2 className="font-pixel text-xs leading-4">{title}</h2>
+          <button onClick={onClose} className="rounded-sm border-2 border-transparent p-1 hover:border-on-pastel" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div ref={bodyRef} className="overflow-y-auto px-4 py-4">
           {children}
         </div>
-        {footer && <div className="flex justify-end gap-2 border-t border-line px-4 py-3">{footer}</div>}
+        {footer && <div className="flex justify-end gap-3 border-t-2 border-line-strong px-4 py-3">{footer}</div>}
       </div>
     </div>
   );
@@ -343,7 +354,7 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-line bg-surface-2 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex gap-1">
       {options.map((o) => (
         <button
           key={o.value}
@@ -351,8 +362,8 @@ export function Segmented<T extends string>({
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-            value === o.value ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink",
+            "rounded-md border-2 border-line-strong px-2.5 py-1 font-mono text-xs",
+            value === o.value ? "bg-butter font-bold text-on-pastel shadow-sm" : "bg-surface text-ink-2 hover:bg-lavender-soft hover:text-ink",
           )}
         >
           {o.label}

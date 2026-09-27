@@ -39,7 +39,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={cycle}
-      className="rounded-lg p-2 text-ink-2 hover:bg-surface-2 hover:text-ink"
+      className="rounded-sm border-2 border-transparent p-2 hover:border-line-strong text-ink-2 hover:bg-lavender-soft hover:text-ink"
       aria-label={`Theme: ${mode}. Click to change.`}
       title={`Theme: ${mode}`}
     >

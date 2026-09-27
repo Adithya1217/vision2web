@@ -1,6 +1,6 @@
-import { AlertTriangle, CheckCircle2, CircleSlash, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 
-import { Badge } from "@/components/ui";
+import { Badge, Sprite } from "@/components/ui";
 import { INVOICE_STATUS_TONE, PAYMENT_STATUS_TONE, PO_STATUS_TONE } from "@/lib/format";
 import type { InvoiceStatus, PaymentStatus, POStatus, StockStatus } from "@/lib/types";
 
@@ -9,18 +9,21 @@ export function StockBadge({ status }: { status: StockStatus }) {
   if (status === "out")
     return (
       <Badge tone="critical">
-        <CircleSlash className="h-3 w-3" aria-hidden /> Out of stock
+        <span className="bg-page p-px">
+          <Sprite name="cross" size={10} />
+        </span>
+        Out of stock
       </Badge>
     );
   if (status === "low")
     return (
       <Badge tone="warning">
-        <AlertTriangle className="h-3 w-3" aria-hidden /> Low
+        <Sprite name="alert" size={12} /> Low
       </Badge>
     );
   return (
     <Badge tone="good">
-      <CheckCircle2 className="h-3 w-3" aria-hidden /> Healthy
+      <Sprite name="check" size={12} /> Healthy
     </Badge>
   );
 }

@@ -187,7 +187,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
                   setText(ex);
                   interpret(ex);
                 }}
-                className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-2 hover:bg-surface-2 hover:text-ink"
+                className="rounded-md border-2 border-line-strong bg-surface px-2.5 py-1 font-mono text-xs text-ink-2 hover:bg-lavender-soft hover:text-ink"
               >
                 {ex}
               </button>
@@ -206,7 +206,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
       {out && (
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
             <div className="flex-1">
               <p className="text-sm">{out.message}</p>
               <p className="mt-0.5 text-xs text-ink-3">
@@ -218,9 +218,9 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
           {out.kind === "read" && <ReadResult result={out.result} />}
 
           {out.proposal && (
-            <div className="rounded-xl border border-line bg-surface-2 p-3">
+            <div className="border-2 border-line-strong bg-butter-soft p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">{out.proposal.title}</h3>
+                <h3 className="font-pixel text-[10px] leading-4">{out.proposal.title}</h3>
                 {out.proposal.ready ? <Badge tone="info">Needs confirmation</Badge> : <Badge tone="warning">Incomplete</Badge>}
               </div>
               <ul className="flex flex-col gap-1 text-sm">
@@ -246,7 +246,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
                   <p className="text-xs text-ink-3">Did you mean:</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {list.map((c) => (
-                      <span key={c.id} className="rounded-md border border-line bg-surface px-2 py-0.5 text-xs">
+                      <span key={c.id} className="rounded-md border-2 border-line-strong bg-surface px-2 py-0.5 font-mono text-xs">
                         {c.label}
                         {c.detail && <span className="text-ink-3"> · {c.detail}</span>}
                       </span>
@@ -260,7 +260,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
                     <p key={i} className="flex items-center gap-1.5 text-sm text-good-ink">
                       <CheckCircle2 className="h-4 w-4" aria-hidden /> {d.label}
                       {d.href && (
-                        <Link href={d.href} onClick={close} className="ml-1 text-accent underline">
+                        <Link href={d.href} onClick={close} className="ml-1 text-info underline">
                           Open
                         </Link>
                       )}
@@ -295,7 +295,7 @@ function ReadResult({ result }: { result: unknown }) {
     const rows = result.slice(0, 8) as Record<string, unknown>[];
     const cols = ["name", "product_name", "sku", "quantity", "sale_price", "balance", "overdue"].filter((c) => c in rows[0]);
     return (
-      <div className="overflow-x-auto rounded-lg border border-line">
+      <div className="overflow-x-auto border-2 border-line-strong">
         <table className="w-full text-sm">
           <tbody>
             {rows.map((r, i) => (

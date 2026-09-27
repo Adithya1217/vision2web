@@ -165,7 +165,7 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
         </Field>
         {supplier && (
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={f.is_active} onChange={(e) => setF((x) => ({ ...x, is_active: e.target.checked }))} className="accent-[var(--accent)]" />
+            <input type="checkbox" checked={f.is_active} onChange={(e) => setF((x) => ({ ...x, is_active: e.target.checked }))} className="accent-[var(--info)]" />
             Active
           </label>
         )}

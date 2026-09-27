@@ -55,11 +55,11 @@ export default function InvoiceDetailPage() {
     <>
       <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Link href="/invoices" className="text-sm text-ink-3 hover:text-ink">
+          <Link href="/invoices" className="font-mono text-sm text-ink-3 hover:text-ink">
             Invoices
           </Link>
           <span className="text-ink-3">/</span>
-          <h1 className="text-xl font-semibold">{d.number ?? `Draft #${d.id}`}</h1>
+          <h1 className="font-pixel text-sm leading-6 sm:text-base">{d.number ?? `Draft #${d.id}`}</h1>
           <InvoiceStatusBadge status={d.status} />
           {d.status !== "draft" && <PaymentBadge status={d.payment_status} overdue={d.is_overdue} />}
         </div>
@@ -245,7 +245,7 @@ export default function InvoiceDetailPage() {
             </Card>
           )}
           {d.customer_id && (
-            <Link href={`/customers/${d.customer_id}`} className="text-sm text-accent hover:underline">
+            <Link href={`/customers/${d.customer_id}`} className="text-sm text-info hover:underline">
               View {d.customer_name}&apos;s khata →
             </Link>
           )}
@@ -413,7 +413,7 @@ function CreditNoteModal({ invoice, onClose }: { invoice: Invoice; onClose: () =
           {(id) => <Textarea id={id} value={reason} onChange={(e) => setReason(e.target.value)} />}
         </Field>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} className="accent-[var(--accent)]" />
+          <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} className="accent-[var(--info)]" />
           Put returned items back in stock
         </label>
         <Field label="Refund method" hint={refundNeeded ? undefined : "Needed only if the credit exceeds what is unpaid"} error={refundNeeded ? "Choose how to refund the excess" : undefined}>

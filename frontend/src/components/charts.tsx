@@ -23,7 +23,7 @@ import { formatINR } from "@/lib/money";
 // formatted from the original decimal string.
 const plot = (v: string | number) => (typeof v === "number" ? v : Number(v));
 
-const axisTick = { fill: "var(--ink-3)", fontSize: 11 };
+const axisTick = { fill: "var(--ink-3)", fontSize: 11, fontFamily: "var(--font-mono)" };
 
 function ChartTooltip({
   active,
@@ -38,7 +38,7 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg">{render(payload[0].payload, label)}</div>
+    <div className="rounded-sm border-2 border-line-strong bg-surface px-3 py-2 font-mono text-xs shadow-sm">{render(payload[0].payload, label)}</div>
   );
 }
 
@@ -64,7 +64,7 @@ export function SalesTrendChart({ rows, period }: { rows: TrendRow[]; period: "d
       <div className="mb-1 flex justify-end">
         <button
           onClick={() => setAsTable((t) => !t)}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-ink-3 hover:bg-surface-2 hover:text-ink"
+          className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-xs text-ink-3 hover:bg-lavender-soft hover:text-ink"
           aria-pressed={asTable}
         >
           {asTable ? <LineIcon className="h-3.5 w-3.5" /> : <Table2 className="h-3.5 w-3.5" />}
@@ -100,13 +100,7 @@ export function SalesTrendChart({ rows, period }: { rows: TrendRow[]; period: "d
         <div className="h-64" role="img" aria-label="Net sales trend">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke="var(--grid)" />
+              <CartesianGrid vertical={false} stroke="var(--grid)" strokeDasharray="4 4" />
               <XAxis
                 dataKey="period_start"
                 tickFormatter={tickLabel}
@@ -123,7 +117,7 @@ export function SalesTrendChart({ rows, period }: { rows: TrendRow[]; period: "d
                 tickFormatter={(v: number) => formatINR(String(Math.round(v)), { compact: true }).replace(".00", "")}
               />
               <Tooltip
-                cursor={{ stroke: "var(--ink-3)", strokeWidth: 1 }}
+                cursor={{ stroke: "var(--ink)", strokeWidth: 2, strokeDasharray: "4 4" }}
                 content={
                   <ChartTooltip
                     render={(row) => (
@@ -143,12 +137,13 @@ export function SalesTrendChart({ rows, period }: { rows: TrendRow[]; period: "d
                 }
               />
               <Area
-                type="monotone"
+                type="stepAfter"
                 dataKey="value"
-                stroke="var(--series-1)"
+                stroke="var(--ink)"
                 strokeWidth={2}
-                fill="url(#salesFill)"
-                activeDot={{ r: 4, stroke: "var(--surface)", strokeWidth: 2, fill: "var(--series-1)" }}
+                fill="var(--series-1)"
+                fillOpacity={1}
+                activeDot={{ r: 4, stroke: "var(--ink)", strokeWidth: 2, fill: "var(--butter)" }}
                 dot={false}
                 isAnimationActive={false}
               />
@@ -180,13 +175,13 @@ export function RankedBarChart({
             type="category"
             dataKey="label"
             width={130}
-            tick={{ fill: "var(--ink-2)", fontSize: 12 }}
+            tick={{ fill: "var(--ink-2)", fontSize: 12, fontFamily: "var(--font-sans)" }}
             tickLine={false}
             axisLine={{ stroke: "var(--axis)" }}
             tickFormatter={(s: string) => (s.length > 18 ? s.slice(0, 17) + "…" : s)}
           />
           <Tooltip
-            cursor={{ fill: "var(--surface-2)" }}
+            cursor={{ fill: "var(--lavender-soft)" }}
             content={
               <ChartTooltip
                 render={(row) => (
@@ -204,11 +199,12 @@ export function RankedBarChart({
           <Bar
             dataKey="plotValue"
             fill="var(--series-1)"
-            radius={[0, 4, 4, 0]}
+            stroke="var(--ink)"
+            strokeWidth={2}
             maxBarSize={20}
             isAnimationActive={false}
           >
-            <LabelList dataKey="value" position="right" fill="var(--ink-2)" fontSize={11} formatter={(v: unknown) => format(v as string | number)} />
+            <LabelList dataKey="value" position="right" fill="var(--ink-2)" fontSize={11} fontFamily="var(--font-mono)" formatter={(v: unknown) => format(v as string | number)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>

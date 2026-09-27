@@ -78,11 +78,11 @@ export default function NewPurchaseOrderPage() {
           <div className="relative p-3">
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search product to add…" aria-label="Add product" />
             {search && products.data && (
-              <ul className="absolute left-3 right-3 z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-line bg-surface shadow-lg">
+              <ul className="absolute left-3 right-3 z-10 mt-1 max-h-60 overflow-auto rounded-sm border-2 border-line-strong bg-surface shadow-md">
                 {products.data.items.map((p) => (
                   <li key={p.id}>
                     <button
-                      className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-surface-2"
+                      className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-lavender-soft"
                       onClick={() => {
                         if (!lines.some((l) => l.product.id === p.id))
                           setLines((ls) => [...ls, { product: p, quantity: p.reorder_quantity || 1, unitCost: p.cost_price ?? "" }]);

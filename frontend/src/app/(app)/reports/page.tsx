@@ -75,7 +75,7 @@ export default function ReportsPage() {
         <span className="text-ink-3">to</span>
         <Input type="date" value={end} min={start} onChange={(e) => { setEnd(e.target.value); setPreset("custom"); }} className="w-auto" aria-label="End date" />
       </div>
-      <div role="tablist" aria-label="Reports" className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
+      <div role="tablist" aria-label="Reports" className="mb-6 flex gap-2 overflow-x-auto pb-1.5 pr-1.5">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -83,8 +83,8 @@ export default function ReportsPage() {
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={clsx(
-              "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm",
-              tab === t.id ? "border-accent font-medium text-ink" : "border-transparent text-ink-2 hover:text-ink",
+              "whitespace-nowrap rounded-md border-2 border-line-strong px-3 py-1.5 font-mono text-sm",
+              tab === t.id ? "bg-butter font-bold text-on-pastel shadow-sm" : "bg-surface text-ink-2 hover:bg-lavender-soft hover:text-ink",
             )}
           >
             {t.label}
@@ -184,12 +184,12 @@ function DataTable({ title, subtitle, rows, cols, filename }: { title: string; s
 
 function Stats({ items }: { items: { label: string; value: string; note?: string }[] }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
       {items.map((s) => (
         <Card key={s.label} className="p-4">
-          <p className="text-xs text-ink-3">{s.label}</p>
-          <p className="mt-1 text-xl font-semibold">{s.value}</p>
-          {s.note && <p className="text-xs text-ink-3">{s.note}</p>}
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.04em] text-ink-2">{s.label}</p>
+          <p className="mt-3 truncate font-pixel text-xs leading-7 sm:text-base">{s.value}</p>
+          {s.note && <p className="mt-1 font-mono text-xs text-ink-3">{s.note}</p>}
         </Card>
       ))}
     </div>

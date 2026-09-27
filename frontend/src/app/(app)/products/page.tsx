@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArchiveRestore, Pencil, Plus, SlidersHorizontal } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -150,10 +151,17 @@ function ProductsPageInner() {
               </thead>
               <tbody>
                 {list.data.items.map((p) => (
-                  <tr key={p.id} className={p.is_active ? "" : "opacity-60"}>
+                  <tr
+                    key={p.id}
+                    className={clsx(
+                      !p.is_active && "opacity-60",
+                      p.stock_status === "low" && "bg-pink-soft",
+                      p.stock_status === "out" && "hatch",
+                    )}
+                  >
                     <Td>
-                      <p className="font-medium">{p.name}</p>
-                      <p className="text-xs text-ink-3">{p.sku}</p>
+                      <p className={clsx("font-semibold", p.stock_status === "out" && "line-through")}>{p.name}</p>
+                      <p className="font-mono text-xs text-ink-3">{p.sku}</p>
                     </Td>
                     <Td className="hidden text-ink-2 md:table-cell">{p.category?.name ?? "—"}</Td>
                     <Td className="tabular text-right">{formatINR(p.sale_price)}</Td>

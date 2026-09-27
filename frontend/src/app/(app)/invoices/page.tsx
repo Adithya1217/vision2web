@@ -101,7 +101,7 @@ export default function InvoicesPage() {
               </thead>
               <tbody>
                 {list.data.items.map((inv) => (
-                  <tr key={inv.id} className="cursor-pointer hover:bg-surface-2" onClick={() => router.push(`/invoices/${inv.id}`)}>
+                  <tr key={inv.id} className="cursor-pointer hover:bg-lavender-soft" onClick={() => router.push(`/invoices/${inv.id}`)}>
                     <Td className="whitespace-nowrap">
                       <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
                         {inv.number ?? `Draft #${inv.id}`}

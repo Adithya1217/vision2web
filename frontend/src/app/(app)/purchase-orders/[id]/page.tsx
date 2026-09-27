@@ -40,11 +40,11 @@ export default function PurchaseOrderPage() {
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Link href="/purchase-orders" className="text-sm text-ink-3 hover:text-ink">
+          <Link href="/purchase-orders" className="font-mono text-sm text-ink-3 hover:text-ink">
             Purchase orders
           </Link>
           <span className="text-ink-3">/</span>
-          <h1 className="text-xl font-semibold">{d.number}</h1>
+          <h1 className="font-pixel text-sm leading-6 sm:text-base">{d.number}</h1>
           <POStatusBadge status={d.status} />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -188,7 +188,7 @@ function ReceiveModal({ po, onClose }: { po: PurchaseOrder; onClose: () => void 
         </tbody>
       </Table>
       <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={updateCost} onChange={(e) => setUpdateCost(e.target.checked)} className="accent-[var(--accent)]" />
+        <input type="checkbox" checked={updateCost} onChange={(e) => setUpdateCost(e.target.checked)} className="accent-[var(--info)]" />
         Update product cost price to this order&apos;s unit cost
       </label>
     </Modal>

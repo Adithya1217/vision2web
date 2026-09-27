@@ -88,7 +88,7 @@ export default function InventoryPage() {
                       <Td className="tabular text-right">{m.balance_after}</Td>
                       <Td className="hidden max-w-xs truncate text-ink-2 md:table-cell">
                         {href ? (
-                          <Link href={href} className="text-accent hover:underline">
+                          <Link href={href} className="text-info hover:underline">
                             {m.reason}
                           </Link>
                         ) : (

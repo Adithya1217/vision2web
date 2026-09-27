@@ -280,7 +280,7 @@ function InvoiceForm({ draft, draftCustomer }: { draft: Invoice | null; draftCus
             </dl>
             <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
               <fieldset className="flex flex-col gap-1.5">
-                <legend className="mb-1 text-xs font-medium text-ink-2">Payment</legend>
+                <legend className="mb-1 text-[13px] font-semibold leading-4 text-ink">Payment</legend>
                 {(
                   [
                     ["full", "Paid in full"],
@@ -289,7 +289,7 @@ function InvoiceForm({ draft, draftCustomer }: { draft: Invoice | null; draftCus
                   ] as [PayMode, string][]
                 ).map(([v, label]) => (
                   <label key={v} className="flex items-center gap-2 text-sm">
-                    <input type="radio" name="paymode" checked={payMode === v} onChange={() => setPayMode(v)} className="accent-[var(--accent)]" />
+                    <input type="radio" name="paymode" checked={payMode === v} onChange={() => setPayMode(v)} className="accent-[var(--info)]" />
                     {label}
                   </label>
                 ))}
@@ -356,13 +356,13 @@ function ProductPicker({ onPick }: { onPick: (p: Product) => void }) {
         aria-label="Add product"
       />
       {open && search && (
-        <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-surface shadow-lg" role="listbox">
+        <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-sm border-2 border-line-strong bg-surface shadow-md" role="listbox">
           {results.data?.items.length === 0 && <li className="px-3 py-2 text-sm text-ink-3">No matches</li>}
           {results.data?.items.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-surface-2 disabled:opacity-50"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-lavender-soft disabled:opacity-50"
                 onMouseDown={(e) => e.preventDefault()}
                 disabled={p.quantity <= 0}
                 onClick={() => {

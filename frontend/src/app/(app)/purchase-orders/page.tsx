@@ -71,7 +71,7 @@ export default function PurchaseOrdersPage() {
               </thead>
               <tbody>
                 {list.data.items.map((po) => (
-                  <tr key={po.id} className="cursor-pointer hover:bg-surface-2" onClick={() => router.push(`/purchase-orders/${po.id}`)}>
+                  <tr key={po.id} className="cursor-pointer hover:bg-lavender-soft" onClick={() => router.push(`/purchase-orders/${po.id}`)}>
                     <Td>
                       <Link href={`/purchase-orders/${po.id}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
                         {po.number}

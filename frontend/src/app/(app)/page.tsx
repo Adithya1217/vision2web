@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { RankedBarChart, SalesTrendChart } from "@/components/charts";
-import { Card, CardHeader, ErrorBanner, PageHeader, Segmented, Spinner } from "@/components/ui";
+import { Card, CardHeader, EmptyState, ErrorBanner, PageHeader, Segmented, Spinner, Sprite } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
@@ -55,10 +55,10 @@ export default function DashboardPage() {
       <ErrorBanner error={summary.error} className="mb-4" />
       {s && (
         <>
-          <section aria-label="Today" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile icon={IndianRupee} label="Today's revenue" value={formatINR(s.today.revenue)} note={s.today.returns !== "0.00" ? `after ${formatINR(s.today.returns)} returns` : "net of returns"} href="/invoices" />
+          <section aria-label="Today" className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
+            <Tile icon={IndianRupee} surface="butter" label="Today's revenue" value={formatINR(s.today.revenue)} note={s.today.returns !== "0.00" ? `after ${formatINR(s.today.returns)} returns` : "net of returns"} href="/invoices" />
             <Tile icon={FileText} label="Invoices today" value={String(s.today.invoice_count)} note={`${s.today.units_sold} units sold`} href="/invoices" />
-            <Tile icon={Wallet} label="Khata outstanding" value={formatINR(s.khata.outstanding)} note={`${s.khata.customers_with_balance} customers`} href="/customers?filter=balance" />
+            <Tile icon={Wallet} surface="lavender" label="Khata outstanding" value={formatINR(s.khata.outstanding)} note={`${s.khata.customers_with_balance} customers`} href="/customers?filter=balance" />
             <Tile
               icon={IndianRupee}
               label="Unpaid invoices"
@@ -68,15 +68,15 @@ export default function DashboardPage() {
               href="/invoices"
             />
           </section>
-          <section aria-label="Stock and purchasing" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <section aria-label="Stock and purchasing" className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
             <Tile icon={AlertTriangle} label="Low stock" value={String(s.stock.low_stock)} note="products at or below alert level" tone={s.stock.low_stock ? "warning" : undefined} href="/products?stock=low" />
             <Tile icon={CircleSlash} label="Out of stock" value={String(s.stock.out_of_stock)} note={`of ${s.stock.active_products} active products`} tone={s.stock.out_of_stock ? "critical" : undefined} href="/products?stock=out" />
-            <Tile icon={ShoppingCart} label="Pending purchase orders" value={String(s.purchase_orders.pending_count)} note={`${formatINR(s.purchase_orders.pending_value)} on order`} href="/purchase-orders" />
+            <Tile icon={ShoppingCart} surface="sky" label="Pending purchase orders" value={String(s.purchase_orders.pending_count)} note={`${formatINR(s.purchase_orders.pending_value)} on order`} href="/purchase-orders" />
             <Tile icon={Package} label="Active products" value={String(s.stock.active_products)} href="/products" />
           </section>
         </>
       )}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-5">
         <Card className="xl:col-span-3">
           <CardHeader
             title="Net sales"
@@ -94,7 +94,7 @@ export default function DashboardPage() {
               />
             }
           />
-          <div className="p-3">
+          <div className="p-4 sm:p-6">
             <ErrorBanner error={trend.error} />
             {trend.data ? <SalesTrendChart rows={trend.data.series} period={trend.data.period} /> : <Spinner />}
           </div>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
               />
             }
           />
-          <div className="p-3">
+          <div className="p-4 sm:p-6">
             <ErrorBanner error={top.error} />
             {top.data ? (
               top.data.rows.length ? (
@@ -126,7 +126,7 @@ export default function DashboardPage() {
                   format={metricFormat}
                 />
               ) : (
-                <p className="py-10 text-center text-sm text-ink-3">No sales in the last 30 days.</p>
+                <EmptyState title="No sales in the last 30 days" hint="Record an invoice and the leaderboard fills up." />
               )
             ) : (
               <Spinner />
@@ -138,12 +138,16 @@ export default function DashboardPage() {
   );
 }
 
+// Full class names so Tailwind can see them at build time.
+const SURFACE = { butter: "bg-butter", sky: "bg-sky", lavender: "bg-lavender" } as const;
+
 function Tile({
   icon: Icon,
   label,
   value,
   note,
   tone,
+  surface,
   href,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -151,19 +155,27 @@ function Tile({
   value: string;
   note?: string;
   tone?: "warning" | "critical";
+  surface?: "butter" | "sky" | "lavender";
   href?: string;
 }) {
+  // Stockpile: pink = warning (paired with the alert sprite / word), otherwise the tile's own pastel.
+  const pastel = tone ? "bg-pink" : surface ? SURFACE[surface] : "";
   const body = (
-    <Card className="h-full p-4 transition-colors hover:border-line-strong">
-      <div className="flex items-center gap-1.5 text-xs text-ink-2">
-        <Icon
-          className={`h-3.5 w-3.5 ${tone === "critical" ? "text-critical-ink" : tone === "warning" ? "text-warning-ink" : "text-ink-3"}`}
-        />
+    <div className={`h-full border-[3px] border-line-strong p-4 shadow-md ${pastel ? `${pastel} text-on-pastel` : "bg-surface"} ${href ? "px-press" : ""}`}>
+      <div className="flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-[0.04em]">
+        {tone === "warning" ? <Sprite name="alert" size={12} className="animate-pulse" /> : <Icon className="h-3.5 w-3.5" />}
         {label}
       </div>
-      <p className="mt-1.5 text-2xl font-semibold tracking-tight">{value}</p>
-      {note && <p className={`mt-0.5 text-xs ${tone === "critical" ? "text-critical-ink" : "text-ink-3"}`}>{note}</p>}
-    </Card>
+      <p className="mt-3 truncate font-pixel text-xs leading-7 sm:text-base xl:text-lg">{value}</p>
+      {note && <p className="mt-1 font-mono text-xs opacity-80">{note}</p>}
+    </div>
   );
-  return href ? <Link href={href}>{body}</Link> : body;
+  return href ? (
+    <Link href={href} className="block h-full">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
+

@@ -88,7 +88,7 @@ function CustomersPageInner() {
               </thead>
               <tbody>
                 {list.data.items.map((c) => (
-                  <tr key={c.id} className="cursor-pointer hover:bg-surface-2" onClick={() => router.push(`/customers/${c.id}`)}>
+                  <tr key={c.id} className="cursor-pointer hover:bg-lavender-soft" onClick={() => router.push(`/customers/${c.id}`)}>
                     <Td>
                       <Link href={`/customers/${c.id}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
                         {c.name}

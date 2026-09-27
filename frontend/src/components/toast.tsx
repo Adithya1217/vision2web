@@ -27,16 +27,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             role={t.tone === "error" ? "alert" : "status"}
-            className="pointer-events-auto flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-sm shadow-lg"
+            className={`pointer-events-auto flex items-start gap-2 rounded-md border-2 border-line-strong px-3 py-2.5 text-[13px] leading-[18px] text-on-pastel shadow-md ${t.tone === "success" ? "bg-mint" : "bg-pink"}`}
           >
             {t.tone === "success" ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good-ink" aria-hidden />
+              <CheckCircle2 className="mt-px h-4 w-4 shrink-0" aria-hidden />
             ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-critical-ink" aria-hidden />
+              <AlertTriangle className="mt-px h-4 w-4 shrink-0" aria-hidden />
             )}
             <span className="flex-1">{t.message}</span>
             <button
-              className="text-ink-3 hover:text-ink"
+              className="opacity-70 hover:opacity-100"
               onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}
               aria-label="Dismiss"
             >

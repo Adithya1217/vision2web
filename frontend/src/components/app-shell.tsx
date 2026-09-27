@@ -23,7 +23,7 @@ import { useEffect, useState } from "react";
 
 import { CommandBar } from "@/components/command-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Spinner } from "@/components/ui";
+import { Spinner, Sprite } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 
 export const NAV = [
@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   const nav = (
-    <nav className="flex flex-1 flex-col gap-0.5 p-2" aria-label="Main">
+    <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-3" aria-label="Main">
       {items.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
@@ -75,8 +75,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClick={() => setOpen(false)}
           aria-current={isActive(href) ? "page" : undefined}
           className={clsx(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-            isActive(href) ? "bg-accent-soft font-medium text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+            "flex items-center gap-2.5 rounded-sm border-2 px-2.5 py-1.5 font-mono text-sm font-medium",
+            isActive(href)
+              ? "border-line-strong bg-butter font-bold text-on-pastel shadow-sm"
+              : "border-transparent text-ink-2 hover:bg-lavender-soft hover:text-ink",
           )}
         >
           <Icon className="h-4 w-4" aria-hidden />
@@ -87,22 +89,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   const brand = (
-    <div className="flex items-center gap-2 px-4 py-4">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-ink">
-        {me.shop.name.slice(0, 1).toUpperCase()}
+    <div className="flex items-center gap-2.5 px-4 py-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border-2 border-line-strong bg-butter">
+        <Sprite name="crate" size={24} />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{me.shop.name}</p>
-        <p className="truncate text-xs text-ink-3">Dukaan Desk</p>
+        <p className="truncate font-pixel text-[10px] leading-4">DUKAAN DESK</p>
+        <p className="truncate font-mono text-xs text-ink-3">{me.shop.name}</p>
       </div>
     </div>
   );
 
   const userBlock = (
-    <div className="border-t border-line p-3">
+    <div className="border-t-[3px] border-line-strong p-3">
       <p className="truncate text-sm font-medium">{me.user.full_name}</p>
-      <p className="mb-2 text-xs capitalize text-ink-3">{me.user.role}</p>
-      <button onClick={logout} className="flex items-center gap-1.5 text-xs text-ink-2 hover:text-ink">
+      <p className="mb-2 font-mono text-xs capitalize text-ink-3">{me.user.role}</p>
+      <button onClick={logout} className="flex items-center gap-1.5 font-mono text-xs text-ink-2 hover:text-ink">
         <LogOut className="h-3.5 w-3.5" /> Sign out
       </button>
     </div>
@@ -110,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen lg:flex">
-      <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface lg:flex">
+      <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r-[3px] border-line-strong bg-surface lg:flex">
         {brand}
         {nav}
         {userBlock}
@@ -118,9 +120,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {open && (
         <div className="no-print fixed inset-0 z-40 lg:hidden" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 bg-[var(--overlay)]" />
           <aside
-            className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-line bg-surface"
+            className="absolute left-0 top-0 flex h-full w-64 flex-col border-r-[3px] border-line-strong bg-surface"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pr-2">
@@ -136,25 +138,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur">
+        <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-2 border-b-[3px] border-line-strong bg-surface px-4">
           <button className="rounded-lg p-2 text-ink-2 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
           {can("ai.use") && (
             <button
               onClick={() => setCommandOpen(true)}
-              className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 text-left text-sm text-ink-3 hover:text-ink-2 sm:max-w-md"
+              className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-sm border-2 border-line-strong bg-surface-2 px-3 text-left text-sm text-ink-3 hover:bg-lavender-soft hover:text-ink-2 sm:max-w-md"
             >
-              <Sparkles className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+              <Sparkles className="h-4 w-4 shrink-0 text-info" aria-hidden />
               <span className="truncate">Ask or command… “bill 2 soap for Ramesh”</span>
-              <kbd className="ml-auto hidden rounded border border-line px-1.5 text-[10px] sm:inline">Ctrl K</kbd>
+              <kbd className="ml-auto hidden rounded-sm border-2 border-line-strong px-1.5 font-mono text-[10px] sm:inline">Ctrl K</kbd>
             </button>
           )}
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
           </div>
         </header>
-        <main className="print-full mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
+        <main className="print-full mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-8 sm:py-8">{children}</main>
       </div>
       <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>

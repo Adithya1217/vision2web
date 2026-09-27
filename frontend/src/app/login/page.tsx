@@ -51,7 +51,7 @@ export default function LoginPage() {
         </Button>
         <p className="text-center text-sm text-ink-3">
           New business?{" "}
-          <Link href="/register" className="font-medium text-accent hover:underline">
+          <Link href="/register" className="font-medium text-info hover:underline">
             Create a shop
           </Link>
         </p>

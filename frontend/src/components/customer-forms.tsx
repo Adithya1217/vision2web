@@ -26,12 +26,12 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
   if (value)
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-2">Customer</span>
-        <div className="flex h-9 items-center justify-between rounded-lg border border-line px-3 text-sm">
+        <span className="text-[13px] font-semibold leading-4 text-ink">Customer</span>
+        <div className="flex h-9 items-center justify-between rounded-sm border-2 border-line-strong bg-butter-soft px-3 text-sm">
           <span className="truncate">
             {value.name} {value.phone && <span className="text-ink-3">· {value.phone}</span>}
           </span>
-          <button className="text-xs text-accent hover:underline" onClick={() => onChange(null)}>
+          <button className="text-xs text-info hover:underline" onClick={() => onChange(null)}>
             Change
           </button>
         </div>
@@ -40,7 +40,7 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
     );
   return (
     <div className="relative flex flex-col gap-1">
-      <span className="text-xs font-medium text-ink-2">Customer</span>
+      <span className="text-[13px] font-semibold leading-4 text-ink">Customer</span>
       <div className="flex gap-1">
         <Input
           value={q}
@@ -60,12 +60,12 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
         )}
       </div>
       {open && (
-        <ul className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-surface shadow-lg">
+        <ul className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-auto rounded-sm border-2 border-line-strong bg-surface shadow-md">
           {results.data?.items.map((c) => (
             <li key={c.id}>
               <button
                 type="button"
-                className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-surface-2"
+                className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-lavender-soft"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange(c);
