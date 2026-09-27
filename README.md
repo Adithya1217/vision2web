@@ -1,0 +1,219 @@
+# Dukaan Desk: multi-tenant MSME business dashboard
+
+Inventory, GST invoicing, payments and khata (customer credit), purchasing, reporting, and a
+confirmation-gated AI/voice assistant for small Indian businesses.
+
+- **Backend:** FastAPI, SQLAlchemy 2, PostgreSQL 16, Alembic (`backend/`)
+- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind CSS 4, TanStack Query, Recharts (`frontend/`)
+
+The day-to-day workflow comes first: **products → stock → invoice → payment/khata → reports**.
+
+---
+
+## Quick start
+
+### Docker
+
+```bash
+docker compose up --build
+docker compose exec backend python -m scripts.seed   # optional demo data
+```
+
+Open http://localhost:3000. The seed creates `owner@demo.example.com`, `manager@demo.example.com` and
+`staff@demo.example.com`, all with the password `password123`.
+
+### Local development
+
+```bash
+# Backend
+cd backend
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env                        # point MSME_DATABASE_URL at your Postgres
+alembic upgrade head
+python -m scripts.seed                      # optional
+uvicorn app.main:app --reload --port 8000   # interactive API docs at http://localhost:8000/docs
+
+# Frontend
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev                                 # http://localhost:3000
+```
+
+### Tests
+
+```bash
+cd backend && pytest        # needs Postgres; defaults to postgresql://postgres@localhost:5432/msme_test
+cd frontend && npm test     # money/tax arithmetic, checked against the backend fixtures
+```
+
+CI (`.github/workflows/ci.yml`) runs ruff, pytest against Postgres, `alembic upgrade head && alembic check`,
+then ESLint, the unit tests, the Next.js build and a TypeScript check.
+
+---
+
+## Roles
+
+| Capability | Owner | Manager | Staff |
+|---|:-:|:-:|:-:|
+| Create and post invoices, record payments | ✓ | ✓ | ✓ (only invoices they created or posted) |
+| Look up customers and khata | ✓ | ✓ | ✓ |
+| Adjust stock, receive purchase orders | ✓ | ✓ | ✓ |
+| Products, prices, price overrides | ✓ | ✓ | |
+| Credit notes and returns | ✓ | ✓ | |
+| Customers and suppliers (write), purchase orders | ✓ | ✓ | |
+| Dashboard, sales/inventory/khata/PO reports | ✓ | ✓ | |
+| GST and profit reports | ✓ | | |
+| Staff accounts, shop settings | ✓ | | |
+
+The map lives in `backend/app/core/permissions.py`. The backend enforces it on every endpoint. The UI only
+uses it to hide navigation and buttons (`GET /api/v1/auth/me` returns the caller's permissions).
+
+---
+
+## Domain rules
+
+### Tenancy
+- Every operational table has `shop_id`. The shop comes from the authenticated user, never from the request.
+- Lookups use `get_scoped()`, so another shop's rows look exactly like missing rows (404).
+- SKUs are unique per shop and case-insensitive (`UNIQUE (shop_id, lower(sku))`).
+
+### Money
+- Money is stored as `NUMERIC(14,2)` and handled as `Decimal` with half-up rounding to paise.
+- The API rejects JSON floats for money and rates and always returns decimal strings.
+- The frontend does arithmetic only on integer paise (`bigint`, `src/lib/money.ts`), and only for previews.
+  The server's totals are final.
+
+### Stock
+- Stock only changes through `apply_movement()`. Each change inserts an immutable `stock_movements` row with
+  its type, delta, balance after, reason and reference.
+- Movement types: opening, purchase receipt, sale, return, manual increase, manual decrease, damage,
+  correction.
+- `CHECK (quantity >= 0)` prevents negative stock. Database triggers reject `UPDATE`/`DELETE` on movements,
+  the ledger, payments and credit notes, and on the items of a posted invoice.
+- Manual adjustments need a reason and an `Idempotency-Key`. A correction takes a physical count and records
+  the difference.
+
+### Invoices
+- An invoice is `draft`, then `posted`. It becomes `cancelled` only when credit notes cover its full value.
+  Posted invoices can't be edited or deleted.
+- **Posting runs in one transaction:**
+  1. Lock the invoice.
+  2. Lock the products `FOR UPDATE` in ascending id order, so two invoices can't deadlock.
+  3. Check stock for the combined quantity of each product.
+  4. Re-snapshot every line: name, SKU, HSN, category, cost, GST rate, price, discount, taxable value,
+     CGST/SGST or IGST, total.
+  5. Deduct stock and write the sale movements.
+  6. Take the next gapless per-shop number.
+  7. Record the payments and write the khata ledger entries.
+
+  Any failure rolls all of it back, including the invoice number.
+- **GST:** prices exclude tax. Each line is rounded on its own and invoice totals are the sum of the lines.
+  - Intra-state sales (place of supply = shop state) get CGST and SGST at half the rate each.
+  - Inter-state sales get IGST.
+  - Place of supply defaults to the customer's state, then the shop's state.
+- **Credit notes** credit whole or partial quantities of posted lines. They restore stock optionally
+  (`return` movements), and a line's final return takes the exact remainder so totals never drift by a paisa.
+  If the credit exceeds what is still unpaid, a refund method is required and a refund is recorded.
+
+### Payments and khata
+- Money methods are cash, UPI, card and bank transfer.
+- "Credit" is not a receipt. It is the unpaid part of an invoice, stored as `credit_amount` and put on the
+  customer's khata. Walk-in (no customer) sales must be paid in full, and credit limits are enforced.
+- Khata balance = `SUM(debit − credit)` over the append-only `ledger_entries`, with no stored balance.
+  - Invoices are debits. Payments and credit notes are credits. Refunds are debits.
+- The ledger endpoint reports whether the ledger balance equals the sum of open invoice balances
+  (`reconciled`). It also lists overdue invoices (past their due date and still unpaid).
+- A khata payment against a customer is split across their open invoices, oldest first.
+
+### Purchase orders
+- `draft → sent → partial → received`. `cancelled` is allowed only before anything has been received.
+- Receipts can be partial and never exceed what is outstanding. Each receipt adds `purchase_receipt`
+  movements and, optionally, updates the product's cost price.
+- Cancelled orders never count as purchases or as pending.
+
+### Idempotency
+- Every mutating endpoint requires an `Idempotency-Key` header. Only register and login are exempt.
+- The key row is inserted in the same transaction as the change, and the response is stored before commit.
+  - Retrying with the same key and body replays the stored response (with the header `Idempotent-Replay: true`).
+  - The same key with a different body returns 409.
+  - A failed request stores nothing, so it is safe to retry.
+  - Concurrent duplicates wait on the unique index and then replay the first result.
+- The frontend's `createSubmitter()` reuses one key while the payload stays the same, so a retry after a
+  network error can't apply a change twice.
+
+### Reports
+- Every report takes an explicit, inclusive `start_date`/`end_date` in the shop's timezone. The dates are
+  converted to UTC bounds with `zoneinfo`.
+- Buckets use `timezone(shop_tz, ts)`. Trends include days, weeks and months with no sales. Weeks start on
+  Monday.
+- Sales are posted invoices by posting time. Returns are credit notes by issue time. Net = gross − returns.
+- **Top products** can rank by `revenue`, `quantity` or `invoice_count`. Ties share a rank (1, 1, 3) and are
+  ordered by the other metrics, then name, then id, so the order is always the same.
+- GST and profit come only from persisted line snapshots. Lines without a cost price are reported
+  separately and never estimated. There are no fallback percentages.
+
+### AI and voice assistant
+- `POST /api/v1/ai/interpret` parses text with a deterministic rule parser (English and common Hinglish).
+  If `MSME_ANTHROPIC_API_KEY` is set, it uses Claude via structured outputs instead, and falls back to the
+  rules on any error.
+- Supported intents: product lookup, stock receipt, stock adjustment, invoice draft, payment, khata lookup,
+  and report summaries.
+- **Read** intents run straight away through the normal read services.
+- **Write** intents return a proposal: the exact REST call or calls, a summary, warnings and candidates for
+  ambiguous names. The endpoint never changes data.
+- When the user confirms, the browser makes those normal API calls with a fresh idempotency key. The backend
+  then re-checks SKUs, prices, tax, stock and permissions.
+- Voice input uses the browser's Web Speech API (`en-IN`).
+
+---
+
+## API surface (`/api/v1`)
+
+| Area | Endpoints |
+|---|---|
+| Auth, users, shop | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `GET /roles`, `GET/POST /users`, `GET/PATCH /users/{id}`, `GET/PATCH /shop` |
+| Catalogue | `GET/POST /categories`, `PATCH /categories/{id}`, `GET/POST /products`, `GET/PATCH /products/{id}`, `POST /products/{id}/archive`, `POST /products/{id}/restore` |
+| Inventory | `GET /inventory/movements`, `POST /inventory/adjustments` |
+| Customers and khata | `GET/POST /customers`, `GET/PATCH /customers/{id}`, `GET /customers/{id}/ledger`, `POST /customers/{id}/payments` |
+| Invoices | `GET/POST /invoices`, `GET/PUT/DELETE /invoices/{id}` (drafts), `POST /invoices/{id}/post`, `POST /invoices/{id}/payments`, `POST /invoices/{id}/credit-notes` |
+| Payments and credit notes | `GET /payments`, `GET /credit-notes` |
+| Suppliers and POs | `GET/POST /suppliers`, `GET/PATCH /suppliers/{id}`, `GET/POST /purchase-orders`, `GET/PUT /purchase-orders/{id}`, `POST /purchase-orders/{id}/send`, `POST /purchase-orders/{id}/cancel`, `POST /purchase-orders/{id}/receipts` |
+| Dashboard | `GET /dashboard/summary`, `GET /dashboard/trend?period=daily\|weekly\|monthly`, `GET /dashboard/top-products?metric=` |
+| Reports | `GET /reports/sales?group_by=day\|week\|month\|category\|product\|customer\|payment_method\|staff`, `/reports/top-products`, `/reports/inventory-valuation`, `/reports/stock-movements`, `/reports/low-stock`, `/reports/out-of-stock`, `/reports/invoices`, `/reports/payments`, `/reports/khata`, `/reports/purchase-orders`, `/reports/gst`, `/reports/profit` |
+| Assistant | `POST /ai/parse`, `POST /ai/interpret` |
+
+List endpoints accept `page`, `page_size` (up to 200), `q` (search) and `sort` (a whitelisted field;
+prefix `-` for descending), plus their own filters. Sorting always ends with `id` as a tiebreaker, so
+pages never overlap or skip rows. Responses are shaped `{items, total, page, page_size}`.
+
+---
+
+## Test coverage (`backend/tests`)
+
+| Area | File |
+|---|---|
+| Tenant isolation, role permissions, staff visibility, deactivated users | `test_auth_tenancy.py` |
+| SKU validation and uniqueness, float rejection, archive/restore, filters, stable pagination, adjustments, immutability triggers | `test_products_inventory.py` |
+| Multi-item totals, discounts, CGST/SGST vs IGST, snapshots, numbering, immutability, rollback when stock is short or payment is invalid | `test_invoices.py` |
+| Concurrent posting without overselling, deadlock-free locking, idempotent retries, key reuse, concurrent duplicates | `test_concurrency_idempotency.py` |
+| Split, partial and full payments, credit sales, credit limits, khata reconciliation, oldest-first allocation, overdue | `test_payments_khata.py` |
+| Partial and full returns, optional restocking, paisa-exact prorating, refunds | `test_credit_notes.py` |
+| Partial and full PO receipts, over-receipt, cancellation exclusions | `test_purchasing.py` |
+| IST and New York day boundaries, zero-sale days, week/month buckets, returns, top-product ties per metric, GST from snapshots, profit without estimates, dashboard | `test_reports.py` |
+| Rule-parser intents, reads run, writes only propose, ambiguity and permission flags | `test_ai.py` |
+
+---
+
+## Configuration
+
+Backend settings come from environment variables with the `MSME_` prefix (see `backend/.env.example`):
+
+- `MSME_DATABASE_URL`
+- `MSME_JWT_SECRET` (the app refuses to start with a weak secret when `MSME_ENVIRONMENT=production`)
+- `MSME_ACCESS_TOKEN_MINUTES`
+- `MSME_CORS_ORIGINS`
+- `MSME_ANTHROPIC_API_KEY` and `MSME_ANTHROPIC_MODEL` (optional)
+
+The frontend needs only `NEXT_PUBLIC_API_URL`.

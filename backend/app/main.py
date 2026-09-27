@@ -15,6 +15,10 @@ ENCODERS_BY_TYPE[Decimal] = str
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.environment == "production" and (
+        settings.jwt_secret == "change-me-in-production" or len(settings.jwt_secret) < 32
+    ):
+        raise RuntimeError("Set MSME_JWT_SECRET to a random value of at least 32 characters in production")
     app = FastAPI(
         title="MSME Business Dashboard API",
         version="1.0.0",
