@@ -1,9 +1,16 @@
+from decimal import Decimal
+
 from fastapi import FastAPI
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import ai, auth, catalog, purchasing, reports, sales
 from app.config import get_settings
 from app.core.errors import AppError, IdempotentReplay, app_error_handler, replay_handler
+
+# Money must never be serialised as a JSON float. Pydantic models already emit Decimal as strings; this makes
+# plain-dict responses (reports, dashboard) and stored idempotent responses do the same.
+ENCODERS_BY_TYPE[Decimal] = str
 
 
 def create_app() -> FastAPI:

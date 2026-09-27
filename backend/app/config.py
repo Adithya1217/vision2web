@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
     # Optional LLM for the AI command layer. When unset, a deterministic rule parser is used.
     anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-sonnet-5"
+    anthropic_model: str = "claude-opus-5"
 
 
 @lru_cache
