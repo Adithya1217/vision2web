@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,15 @@ class Settings(BaseSettings):
     # Optional LLM for the AI command layer. When unset, a deterministic rule parser is used.
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5"
+
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg_driver(cls, url: str) -> str:
+        # Hosting providers (e.g. Render, Heroku) hand out postgres:// or postgresql:// URLs.
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
 
 
 @lru_cache

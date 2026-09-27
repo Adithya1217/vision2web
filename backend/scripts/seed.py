@@ -1,10 +1,12 @@
 """Seed a demo shop with realistic data (60 days of sales, khata, POs).
 
 Usage:  python -m scripts.seed            (from backend/, after `alembic upgrade head`)
-Logins: owner@demo.example.com / manager@demo.example.com / staff@demo.example.com, password "password123".
+Logins: owner@demo.example.com / manager@demo.example.com / staff@demo.example.com.
+Password: $MSME_DEMO_PASSWORD, or "password123" outside production.
 """
 
 import datetime as dt
+import os
 import random
 from decimal import Decimal
 
@@ -44,7 +46,19 @@ CUSTOMERS = [("Ramesh Kumar", "9876543210", None, "29", "5000.00"), ("Sunita Tra
              None), ("Priya Sharma", "9900112233", None, "29", "2000.00")]
 
 
+PASSWORD = os.environ.get("MSME_DEMO_PASSWORD", "").strip()
+
+
 def main():
+    global PASSWORD
+    if not PASSWORD:
+        if os.environ.get("MSME_ENVIRONMENT") == "production":
+            print("MSME_DEMO_PASSWORD is not set; skipping demo data in production.")
+            return
+        PASSWORD = "password123"
+    if len(PASSWORD) < 8:
+        print("MSME_DEMO_PASSWORD must be at least 8 characters; skipping demo data.")
+        return
     db = SessionLocal()
     rnd = random.Random(42)
     if db.query(User).filter(User.email == "owner@demo.example.com").first():
@@ -53,10 +67,10 @@ def main():
     owner, _, _ = accounts.register(db, RegisterIn(
         shop=ShopIn(name="Sharma General Store", legal_name="Sharma General Store Pvt Ltd", gstin="29AAACS1234A1Z5",
                     state_code="29", address="12 MG Road, Bengaluru", phone="080-4000-1234"),
-        owner_name="Vikram Sharma", email="owner@demo.example.com", password="password123"))
+        owner_name="Vikram Sharma", email="owner@demo.example.com", password=PASSWORD))
     ctx = Ctx(db=db, user=owner, shop=owner.shop)
     staff_users = [accounts.create_user(ctx, UserCreate(email=f"{r.value}@demo.example.com", full_name=n,
-                                                        password="password123", role=r))
+                                                        password=PASSWORD, role=r))
                    for r, n in ((Role.manager, "Meera Iyer"), (Role.staff, "Ravi Das"))]
     db.commit()
 
@@ -136,7 +150,7 @@ def main():
     purchasing.create(ctx, PurchaseOrderIn(supplier_id=suppliers[1].id, items=[
         POItemIn(product_id=products[7].id, quantity=30, unit_cost=Decimal("86.00"))]))
     db.commit()
-    print("Seeded demo shop. Log in as owner@demo.example.com / password123")
+    print("Seeded demo shop. Log in as owner@demo.example.com with the demo password.")
 
 
 if __name__ == "__main__":

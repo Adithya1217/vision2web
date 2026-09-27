@@ -1,0 +1,34 @@
+# Render Blueprint: one free web service (Next.js + FastAPI in one container) and a free Postgres.
+# Deploy: https://render.com/deploy?repo=https://github.com/Adithya1217/vision2web
+databases:
+  - name: dukaan-desk-db
+    plan: free
+    databaseName: msme
+    user: msme
+
+services:
+  - type: web
+    name: dukaan-desk
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: MSME_DATABASE_URL
+        fromDatabase:
+          name: dukaan-desk-db
+          property: connectionString
+      - key: MSME_JWT_SECRET
+        generateValue: true
+      - key: MSME_ENVIRONMENT
+        value: production
+      - key: SEED_DEMO
+        value: "true"
+      # You'll be asked for this when creating the Blueprint. It becomes the password of the three
+      # demo accounts (owner@ / manager@ / staff@demo.example.com). Minimum 8 characters.
+      - key: MSME_DEMO_PASSWORD
+        sync: false
+      # Optional: enables the Claude-backed assistant parser. Leave blank to use the rule parser.
+      - key: MSME_ANTHROPIC_API_KEY
+        sync: false

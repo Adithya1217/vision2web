@@ -46,7 +46,8 @@ export function subscribeToken(onChange: () => void) {
 type Query = Record<string, string | number | boolean | null | undefined>;
 
 function buildUrl(path: string, query?: Query) {
-  const url = new URL(API_URL + path);
+  // API_URL may be absolute (separate API host) or relative ("/api/v1", proxied by Next.js).
+  const url = new URL(API_URL + path, typeof window === "undefined" ? "http://localhost" : window.location.origin);
   for (const [k, v] of Object.entries(query ?? {})) {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   }
