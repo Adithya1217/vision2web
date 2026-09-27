@@ -11,6 +11,7 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  Smile,
   Sparkles,
   Truck,
   UserCog,
@@ -25,6 +26,7 @@ import { CommandBar } from "@/components/command-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Spinner, Sprite } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+import { getUiMode, setUiMode } from "@/lib/ui-mode";
 
 export const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard.view" },
@@ -49,6 +51,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && !authenticated) router.replace("/login");
   }, [loading, authenticated, router]);
+
+  // People who chose simple mode land there instead of the dashboard.
+  useEffect(() => {
+    if (pathname === "/" && getUiMode() === "simple") router.replace("/simple");
+  }, [pathname, router]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,7 +159,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <kbd className="ml-auto hidden rounded-sm border-2 border-line-strong px-1.5 font-mono text-[10px] sm:inline">Ctrl K</kbd>
             </button>
           )}
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/simple"
+              aria-label="Simple mode"
+              onClick={() => setUiMode("simple")}
+              className="flex h-9 items-center gap-1.5 rounded-sm border-2 border-line-strong bg-mint px-2.5 font-mono text-sm font-semibold text-on-pastel shadow-sm"
+            >
+              <Smile className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">Simple mode</span>
+            </Link>
             <ThemeToggle />
           </div>
         </header>

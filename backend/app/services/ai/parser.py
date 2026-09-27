@@ -100,8 +100,12 @@ def _method(text: str) -> str | None:
 
 def parse_items(fragment: str) -> list[ItemRef]:
     items = []
+    chunks = []
     for chunk in re.split(r",|\band\b|\baur\b|&|\+", fragment, flags=re.I):
         chunk = _clean(chunk)
+        # "2 soap 1 atta": quantity-first lists often skip "and", so a new number starts a new item.
+        chunks.extend(re.split(r"\s+(?=\d+\s+[^\d\s])", chunk) if re.match(r"\d", chunk) else [chunk])
+    for chunk in chunks:
         if not chunk:
             continue
         m = _ITEM_LEAD.match(chunk)

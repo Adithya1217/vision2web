@@ -1,41 +1,12 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Mic, MicOff, Send, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
 
 import { useToast } from "@/components/toast";
 import { Badge, Button, ErrorBanner, Input, Modal } from "@/components/ui";
-import { api } from "@/lib/api";
-import { useSubmitter } from "@/lib/hooks";
+import { useAssistant } from "@/lib/assistant";
 import { formatINR } from "@/lib/money";
-
-interface ProposedAction {
-  method: "POST" | "PUT" | "PATCH";
-  path: string;
-  body: Record<string, unknown>;
-  label: string;
-}
-interface Interpretation {
-  text: string;
-  intent: string;
-  kind: "read" | "write";
-  source: "rules" | "llm";
-  confidence: number;
-  message: string;
-  result: unknown;
-  proposal: {
-    title: string;
-    summary: string[];
-    actions: ProposedAction[];
-    warnings: string[];
-    permitted: boolean;
-    ready: boolean;
-    preview: { grand_total?: string; note?: string } | null;
-  } | null;
-  candidates: Record<string, { id: number; label: string; detail: string | null }[]>;
-}
 
 const EXAMPLES = [
   "stock of parle-g",
@@ -47,107 +18,14 @@ const EXAMPLES = [
   "top products by units this month",
 ];
 
-// Minimal typing for the Web Speech API (not in lib.dom for all browsers).
-type Recognition = {
-  lang: string;
-  interimResults: boolean;
-  onresult: (e: { results: { 0: { transcript: string } }[] }) => void;
-  onend: () => void;
-  onerror: () => void;
-  start: () => void;
-  stop: () => void;
-};
-
 export function CommandBar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [out, setOut] = useState<Interpretation | null>(null);
-  const [done, setDone] = useState<{ label: string; href?: string }[] | null>(null);
-  const [listening, setListening] = useState(false);
-  const recRef = useRef<Recognition | null>(null);
-  const submitter = useSubmitter();
   const toast = useToast();
-  const qc = useQueryClient();
+  const { text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm, reset } =
+    useAssistant({ onDone: (title) => toast(title + " — done") });
 
   const close = () => {
-    recRef.current?.stop();
-    setListening(false);
+    stopListening();
     onClose();
-  };
-
-  const speechSupported =
-    typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
-
-  const interpret = async (value = text) => {
-    if (!value.trim()) return;
-    setBusy(true);
-    setError(null);
-    setOut(null);
-    setDone(null);
-    try {
-      setOut(await api.post<Interpretation>("/ai/interpret", { text: value }));
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const listen = () => {
-    if (listening) {
-      recRef.current?.stop();
-      return;
-    }
-    const W = window as unknown as Record<string, new () => Recognition>;
-    const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
-    if (!Ctor) return;
-    const rec = new Ctor();
-    rec.lang = "en-IN";
-    rec.interimResults = false;
-    rec.onresult = (e) => {
-      const said = e.results[0][0].transcript;
-      setText(said);
-      interpret(said);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
-  };
-
-  const confirm = async () => {
-    if (!out?.proposal) return;
-    setBusy(true);
-    setError(null);
-    const results: { label: string; href?: string }[] = [];
-    try {
-      for (const action of out.proposal.actions) {
-        const key = submitter.keyFor({ path: action.path, body: action.body });
-        const method = action.method.toLowerCase() as "post" | "put" | "patch";
-        const res = await api[method]<{ id?: number; invoice_id?: number }>(action.path, action.body, key);
-        submitter.done();
-        const href =
-          action.path === "/invoices" && res && "id" in res ? `/invoices/${res.id}` : undefined;
-        results.push({ label: action.label, href });
-      }
-      setDone(results);
-      toast(out.proposal.title + " — done");
-      qc.invalidateQueries();
-    } catch (err) {
-      setError(err);
-      if (results.length) setDone(results);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const reset = () => {
-    setText("");
-    setOut(null);
-    setDone(null);
-    setError(null);
   };
 
   return (
@@ -167,7 +45,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
           aria-label="Command"
         />
         {speechSupported && (
-          <Button type="button" onClick={listen} aria-label={listening ? "Stop listening" : "Speak a command"} variant={listening ? "danger" : "secondary"}>
+          <Button type="button" onClick={() => listen()} aria-label={listening ? "Stop listening" : "Speak a command"} variant={listening ? "danger" : "secondary"}>
             {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
           </Button>
         )}
@@ -272,7 +150,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
               ) : (
                 <div className="mt-3 flex gap-2">
-                  <Button variant="primary" onClick={confirm} loading={busy} disabled={!out.proposal.ready}>
+                  <Button variant="primary" onClick={() => confirm()} loading={busy} disabled={!out.proposal.ready}>
                     Confirm
                   </Button>
                   <Button variant="ghost" onClick={reset}>
@@ -288,7 +166,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
-function ReadResult({ result }: { result: unknown }) {
+export function ReadResult({ result }: { result: unknown }) {
   if (!result) return null;
   if (Array.isArray(result)) {
     if (!result.length) return null;
