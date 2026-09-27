@@ -19,3 +19,22 @@ export function setUiMode(mode: UiMode) {
     /* storage unavailable: the choice lasts for this page only */
   }
 }
+
+// Whether simple mode reads its screens aloud (on unless the person turned it off on this device).
+const SPEECH_KEY = "msme.simple-speech";
+
+export function getSpeechOn(): boolean {
+  try {
+    return window.localStorage.getItem(SPEECH_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setSpeechOn(on: boolean) {
+  try {
+    window.localStorage.setItem(SPEECH_KEY, on ? "on" : "off");
+  } catch {
+    /* storage unavailable: the choice lasts for this page only */
+  }
+}

@@ -2,7 +2,7 @@ import logging
 from collections.abc import Iterable
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -68,12 +68,28 @@ def _send_stock_alert(db: Session, product: Product, old_qty: int, new_qty: int)
             f"Please consider restocking this product."
         )
 
-    for recipient in recipients:
+    # Queued, not sent: the email goes out only once this transaction commits (see _send_queued_alerts).
+    db.info.setdefault(_PENDING_ALERTS, []).extend((r, subject, body) for r in recipients)
+
+
+_PENDING_ALERTS = "pending_stock_alerts"
+
+
+# ponytail: sent inline after commit (adds provider latency to that one request); move to a job queue if it matters.
+@event.listens_for(Session, "after_commit")
+def _send_queued_alerts(session: Session) -> None:
+    for recipient, subject, body in session.info.pop(_PENDING_ALERTS, []):
         try:
             send_email(recipient=recipient, subject=subject, body=body)
         except Exception:
-            # Email failure must not break the stock operation.
-            logger.exception("Failed to send stock alert email to %s for product %s", recipient, product.id)
+            # Email failure must not break the stock operation, which is already committed.
+            logger.exception("Failed to send stock alert email to %s: %s", recipient, subject)
+
+
+@event.listens_for(Session, "after_rollback")
+def _drop_queued_alerts(session: Session) -> None:
+    # The stock change never happened, so neither did the alert.
+    session.info.pop(_PENDING_ALERTS, None)
 
 
 def apply_movement(

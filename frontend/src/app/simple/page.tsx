@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowLeft, BarChart3, IndianRupee, Mic, MicOff, PackagePlus, ShoppingBag } from "lucide-react";
+import { ArrowLeft, BarChart3, IndianRupee, Mic, MicOff, PackagePlus, ShoppingBag, Volume2, VolumeX } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -13,7 +13,7 @@ import { Spinner, Sprite } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { type Candidate, type Interpretation, useAssistant } from "@/lib/assistant";
 import { useAuth } from "@/lib/auth";
-import { setUiMode } from "@/lib/ui-mode";
+import { getSpeechOn, setSpeechOn, setUiMode } from "@/lib/ui-mode";
 import { formatINR } from "@/lib/money";
 import type { DashboardSummary } from "@/lib/types";
 
@@ -84,10 +84,25 @@ export default function SimplePage() {
     enabled: authenticated && can("dashboard.view"),
   });
 
+  // Read each screen aloud: what matters on it, not every receipt line.
+  // The header (and this toggle) renders only after sign-in on the client, so reading storage here is safe.
+  const [speechOn, setSpeech] = useState(() => typeof window === "undefined" || getSpeechOn());
+  const spoken = speechOn ? spokenText(a, business ? summary.data : undefined) : "";
+  useEffect(() => {
+    if (spoken) a.speak(spoken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- speak only when the screen's words change
+  }, [spoken]);
+  const toggleSpeech = () => {
+    if (speechOn) a.stopSpeaking();
+    setSpeechOn(!speechOn);
+    setSpeech(!speechOn);
+  };
+
   if (loading || !me) return <Spinner label="Opening your shop" />;
 
   const home = () => {
     a.stopListening();
+    a.stopSpeaking();
     a.reset();
     setTask(null);
     setBusiness(false);
@@ -106,6 +121,16 @@ export default function SimplePage() {
           <p className="truncate text-base font-semibold leading-5">{me.shop.name}</p>
           <p className="truncate text-sm text-ink-3">Hello, {me.user.full_name.split(" ")[0]}</p>
         </div>
+        {a.ttsSupported && (
+          <button
+            onClick={toggleSpeech}
+            aria-label={speechOn ? "Turn off reading aloud" : "Turn on reading aloud"}
+            aria-pressed={speechOn}
+            className="rounded-sm border-2 border-transparent p-2 hover:border-line-strong"
+          >
+            {speechOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+          </button>
+        )}
         <ThemeToggle />
       </header>
 
@@ -214,14 +239,7 @@ function Today({ s }: { s: DashboardSummary }) {
 }
 
 function Business({ s, onHome }: { s: DashboardSummary; onHome: () => void }) {
-  const low = s.stock.low_stock + s.stock.out_of_stock;
-  const lines = [
-    `You sold ${formatINR(s.today.revenue)} today in ${s.today.invoice_count} ${s.today.invoice_count === 1 ? "bill" : "bills"}.`,
-    low ? `${low} ${low === 1 ? "item is" : "items are"} running low. Order soon.` : "All shelves are stocked.",
-    s.khata.customers_with_balance
-      ? `${s.khata.customers_with_balance} customers owe you ${formatINR(s.khata.outstanding)} on khata.`
-      : "Nobody owes you money right now.",
-  ];
+  const lines = businessLines(s);
   return (
     <Panel className="bg-surface">
       <p className="text-2xl font-semibold">Today at a glance</p>
@@ -422,6 +440,36 @@ function Result({ a, onHome }: { a: ReturnType<typeof useAssistant>; onHome: () 
       )}
     </Panel>
   );
+}
+
+function businessLines(s: DashboardSummary): string[] {
+  const low = s.stock.low_stock + s.stock.out_of_stock;
+  return [
+    `You sold ${formatINR(s.today.revenue)} today in ${s.today.invoice_count} ${s.today.invoice_count === 1 ? "bill" : "bills"}.`,
+    low ? `${low} ${low === 1 ? "item is" : "items are"} running low. Order soon.` : "All shelves are stocked.",
+    s.khata.customers_with_balance
+      ? `${s.khata.customers_with_balance} customers owe you ${formatINR(s.khata.outstanding)} on khata.`
+      : "Nobody owes you money right now.",
+  ];
+}
+
+// The words for the current screen, mirroring what Result and Business show.
+function spokenText(a: ReturnType<typeof useAssistant>, business?: DashboardSummary): string {
+  if (business) return businessLines(business).join(" ");
+  if (a.busy) return "";
+  if (a.error && !a.out) return a.error instanceof ApiError ? a.error.message : "That didn’t go through.";
+  const out = a.out;
+  if (!out) return "";
+  if (a.done) return ["Done.", ...a.done.map((d) => d.label)].join(" ");
+  if (a.error) return a.error instanceof ApiError ? a.error.message : "That didn’t go through.";
+  if (out.kind === "read") return out.message;
+  const p = out.proposal;
+  if (!p || out.intent === "unknown") return "Sorry, I didn’t understand that.";
+  if (Object.keys(out.candidates).length) return "Which one did you mean?";
+  if (!p.ready) return p.warnings.join(" ");
+  const total = p.preview?.grand_total ? ` Total ${formatINR(p.preview.grand_total)}.` : "";
+  const ask = out.intent === "invoice_draft" ? " How did they pay?" : " Please check, then tap yes.";
+  return `${TITLES[out.intent] ?? p.title}.${total}${ask}`;
 }
 
 const TITLES: Record<string, string> = {

@@ -190,7 +190,7 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
     submitter.done();
     draftRef.current = null;
     return {
-      label: `Bill ${posted.number ?? ""} saved${pay === "khata" ? " on khata" : ` · paid by ${pay.method.toUpperCase()}`}`,
+      label: `Bill ${posted.number ?? ""} saved${pay === "khata" ? " on khata" : ` · paid by ${pay.method === "upi" ? "UPI" : "cash"}`}`,
       href: `/invoices/${draft.id}`,
     };
   };

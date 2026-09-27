@@ -1,5 +1,5 @@
 from app.services import inventory
-from tests.conftest import make_product
+from tests.conftest import make_product, sell
 
 
 def test_alert_emails_only_when_crossing_a_threshold(owner, manager, staff, monkeypatch):
@@ -36,3 +36,18 @@ def test_email_failure_does_not_block_stock_change(owner, monkeypatch):
     owner.ok(owner.post("/inventory/adjustments",
                         {"product_id": p["id"], "movement_type": "manual_decrease", "quantity": 1, "reason": "test"}))
     assert owner.ok(owner.get(f"/products/{p['id']}"))["quantity"] == 0
+
+
+def test_no_alert_when_the_sale_is_rolled_back(owner, monkeypatch):
+    sent = []
+    monkeypatch.setattr(inventory, "send_email", lambda recipient, subject, body: sent.append(subject))
+    p = make_product(owner, sku="ALERT-3", price="10.00", gst="0", qty=6, low_stock_threshold=5)
+
+    # Stock is deducted (crossing into low) before the payment check fails: a walk-in must pay in full.
+    failed = sell(owner, [(p["id"], 2)])
+    assert failed.status_code == 422
+    assert owner.ok(owner.get(f"/products/{p['id']}"))["quantity"] == 6
+    assert sent == []
+
+    owner.ok(sell(owner, [(p["id"], 2)], payments=[{"method": "cash", "amount": "20.00"}]))
+    assert sent == ["Low Stock Alert: Product ALERT-3"]
