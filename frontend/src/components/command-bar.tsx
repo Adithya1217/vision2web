@@ -1,7 +1,17 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Mic, MicOff, Send, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Mic,
+  MicOff,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
@@ -17,6 +27,7 @@ interface ProposedAction {
   body: Record<string, unknown>;
   label: string;
 }
+
 interface Interpretation {
   text: string;
   intent: string;
@@ -34,7 +45,10 @@ interface Interpretation {
     ready: boolean;
     preview: { grand_total?: string; note?: string } | null;
   } | null;
-  candidates: Record<string, { id: number; label: string; detail: string | null }[]>;
+  candidates: Record<
+    string,
+    { id: number; label: string; detail: string | null }[]
+  >;
 }
 
 const EXAMPLES = [
@@ -47,7 +61,7 @@ const EXAMPLES = [
   "top products by units this month",
 ];
 
-// Minimal typing for the Web Speech API (not in lib.dom for all browsers).
+// Minimal typing for the Web Speech API.
 type Recognition = {
   lang: string;
   interimResults: boolean;
@@ -58,35 +72,110 @@ type Recognition = {
   stop: () => void;
 };
 
-export function CommandBar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandBar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [out, setOut] = useState<Interpretation | null>(null);
-  const [done, setDone] = useState<{ label: string; href?: string }[] | null>(null);
+  const [done, setDone] = useState<{ label: string; href?: string }[] | null>(
+    null,
+  );
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+
   const recRef = useRef<Recognition | null>(null);
+
   const submitter = useSubmitter();
   const toast = useToast();
   const qc = useQueryClient();
 
   const close = () => {
     recRef.current?.stop();
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     setListening(false);
+    setSpeaking(false);
     onClose();
   };
 
   const speechSupported =
-    typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const textToSpeechSupported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
+
+  // Text-to-voice
+  const speak = (message: string) => {
+    if (
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window) ||
+      !message.trim()
+    ) {
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(message);
+
+    utterance.lang = "en-IN";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onstart = () => {
+      setSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      setSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
+  };
 
   const interpret = async (value = text) => {
     if (!value.trim()) return;
+
     setBusy(true);
     setError(null);
     setOut(null);
     setDone(null);
+
     try {
-      setOut(await api.post<Interpretation>("/ai/interpret", { text: value }));
+      const result = await api.post<Interpretation>("/ai/interpret", {
+        text: value,
+      });
+
+      setOut(result);
+
+      // Automatically speak the assistant's response.
+      if (textToSpeechSupported && result.message) {
+        speak(result.message);
+      }
     } catch (err) {
       setError(err);
     } finally {
@@ -99,51 +188,99 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
       recRef.current?.stop();
       return;
     }
+
     const W = window as unknown as Record<string, new () => Recognition>;
+
     const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
+
     if (!Ctor) return;
+
     const rec = new Ctor();
+
     rec.lang = "en-IN";
     rec.interimResults = false;
+
     rec.onresult = (e) => {
       const said = e.results[0][0].transcript;
+
       setText(said);
+
+      // Stop any previous speech before processing a new voice command.
+      stopSpeaking();
+
       interpret(said);
     };
+
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
+
     recRef.current = rec;
+
     setListening(true);
     rec.start();
   };
 
   const confirm = async () => {
     if (!out?.proposal) return;
+
     setBusy(true);
     setError(null);
+
     const results: { label: string; href?: string }[] = [];
+
     try {
       for (const action of out.proposal.actions) {
-        const key = submitter.keyFor({ path: action.path, body: action.body });
+        const key = submitter.keyFor({
+          path: action.path,
+          body: action.body,
+        });
+
         const method = action.method.toLowerCase() as "post" | "put" | "patch";
-        const res = await api[method]<{ id?: number; invoice_id?: number }>(action.path, action.body, key);
+
+        const res = await api[method]<{
+          id?: number;
+          invoice_id?: number;
+        }>(action.path, action.body, key);
+
         submitter.done();
+
         const href =
-          action.path === "/invoices" && res && "id" in res ? `/invoices/${res.id}` : undefined;
-        results.push({ label: action.label, href });
+          action.path === "/invoices" && res && "id" in res
+            ? `/invoices/${res.id}`
+            : undefined;
+
+        results.push({
+          label: action.label,
+          href,
+        });
       }
+
       setDone(results);
-      toast(out.proposal.title + " — done");
+
+      const message = out.proposal.title + " — done";
+
+      toast(message);
+
+      // Speak confirmation after successful action.
+      if (textToSpeechSupported) {
+        speak(message);
+      }
+
       qc.invalidateQueries();
     } catch (err) {
       setError(err);
-      if (results.length) setDone(results);
+
+      if (results.length) {
+        setDone(results);
+      }
     } finally {
       setBusy(false);
     }
   };
 
   const reset = () => {
+    stopSpeaking();
+
     setText("");
     setOut(null);
     setDone(null);
@@ -166,12 +303,46 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
           placeholder="Type or speak: “bill 2 soap for Ramesh”"
           aria-label="Command"
         />
+
         {speechSupported && (
-          <Button type="button" onClick={listen} aria-label={listening ? "Stop listening" : "Speak a command"} variant={listening ? "danger" : "secondary"}>
-            {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          <Button
+            type="button"
+            onClick={listen}
+            aria-label={listening ? "Stop listening" : "Speak a command"}
+            variant={listening ? "danger" : "secondary"}
+          >
+            {listening ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
           </Button>
         )}
-        <Button type="submit" variant="primary" loading={busy && !out} aria-label="Run">
+
+        {textToSpeechSupported && (
+          <Button
+            type="button"
+            onClick={() =>
+              speaking ? stopSpeaking() : out?.message && speak(out.message)
+            }
+            aria-label={speaking ? "Stop speaking" : "Read response aloud"}
+            variant={speaking ? "danger" : "secondary"}
+            disabled={!out?.message}
+          >
+            {speaking ? (
+              <VolumeX className="h-4 w-4" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+
+        <Button
+          type="submit"
+          variant="primary"
+          loading={busy && !out}
+          aria-label="Run"
+        >
           <Send className="h-4 w-4" />
         </Button>
       </form>
@@ -179,6 +350,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
       {!out && !error && (
         <div className="mt-4">
           <p className="mb-2 text-xs font-medium text-ink-3">Try</p>
+
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLES.map((ex) => (
               <button
@@ -193,10 +365,12 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
               </button>
             ))}
           </div>
+
           <p className="mt-4 flex items-start gap-1.5 text-xs text-ink-3">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            Questions are answered right away. Anything that changes data is shown for your confirmation first and
-            then runs through the normal, permission-checked API.
+            Questions are answered right away. Anything that changes data is
+            shown for your confirmation first and then runs through the normal,
+            permission-checked API.
           </p>
         </div>
       )}
@@ -206,11 +380,17 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
       {out && (
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+            <Sparkles
+              className="mt-0.5 h-4 w-4 shrink-0 text-accent"
+              aria-hidden
+            />
+
             <div className="flex-1">
               <p className="text-sm">{out.message}</p>
+
               <p className="mt-0.5 text-xs text-ink-3">
-                {out.intent.replace("_", " ")} · {out.source === "llm" ? "AI parser" : "rule parser"}
+                {out.intent.replace("_", " ")} ·{" "}
+                {out.source === "llm" ? "AI parser" : "rule parser"}
               </p>
             </div>
           </div>
@@ -221,8 +401,14 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
             <div className="rounded-xl border border-line bg-surface-2 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">{out.proposal.title}</h3>
-                {out.proposal.ready ? <Badge tone="info">Needs confirmation</Badge> : <Badge tone="warning">Incomplete</Badge>}
+
+                {out.proposal.ready ? (
+                  <Badge tone="info">Needs confirmation</Badge>
+                ) : (
+                  <Badge tone="warning">Incomplete</Badge>
+                )}
               </div>
+
               <ul className="flex flex-col gap-1 text-sm">
                 {out.proposal.summary.map((line, i) => (
                   <li key={i} className="tabular">
@@ -230,51 +416,86 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
                   </li>
                 ))}
               </ul>
-              {out.proposal.preview?.note && <p className="mt-2 text-xs text-ink-3">{out.proposal.preview.note}</p>}
+
+              {out.proposal.preview?.note && (
+                <p className="mt-2 text-xs text-ink-3">
+                  {out.proposal.preview.note}
+                </p>
+              )}
+
               {out.proposal.warnings.length > 0 && (
                 <ul className="mt-2 flex flex-col gap-1">
                   {out.proposal.warnings.map((w, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-xs text-warning-ink">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <li
+                      key={i}
+                      className="flex items-start gap-1.5 text-xs text-warning-ink"
+                    >
+                      <AlertTriangle
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
                       {w}
                     </li>
                   ))}
                 </ul>
               )}
+
               {Object.entries(out.candidates).map(([k, list]) => (
                 <div key={k} className="mt-2">
                   <p className="text-xs text-ink-3">Did you mean:</p>
+
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {list.map((c) => (
-                      <span key={c.id} className="rounded-md border border-line bg-surface px-2 py-0.5 text-xs">
+                      <span
+                        key={c.id}
+                        className="rounded-md border border-line bg-surface px-2 py-0.5 text-xs"
+                      >
                         {c.label}
-                        {c.detail && <span className="text-ink-3"> · {c.detail}</span>}
+
+                        {c.detail && (
+                          <span className="text-ink-3"> · {c.detail}</span>
+                        )}
                       </span>
                     ))}
                   </div>
                 </div>
               ))}
+
               {done ? (
                 <div className="mt-3 flex flex-col gap-1">
                   {done.map((d, i) => (
-                    <p key={i} className="flex items-center gap-1.5 text-sm text-good-ink">
+                    <p
+                      key={i}
+                      className="flex items-center gap-1.5 text-sm text-good-ink"
+                    >
                       <CheckCircle2 className="h-4 w-4" aria-hidden /> {d.label}
                       {d.href && (
-                        <Link href={d.href} onClick={close} className="ml-1 text-accent underline">
+                        <Link
+                          href={d.href}
+                          onClick={close}
+                          className="ml-1 text-accent underline"
+                        >
                           Open
                         </Link>
                       )}
                     </p>
                   ))}
+
                   <Button size="sm" className="mt-2 self-start" onClick={reset}>
                     New command
                   </Button>
                 </div>
               ) : (
                 <div className="mt-3 flex gap-2">
-                  <Button variant="primary" onClick={confirm} loading={busy} disabled={!out.proposal.ready}>
+                  <Button
+                    variant="primary"
+                    onClick={confirm}
+                    loading={busy}
+                    disabled={!out.proposal.ready}
+                  >
                     Confirm
                   </Button>
+
                   <Button variant="ghost" onClick={reset}>
                     Cancel
                   </Button>
@@ -290,10 +511,22 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
 
 function ReadResult({ result }: { result: unknown }) {
   if (!result) return null;
+
   if (Array.isArray(result)) {
     if (!result.length) return null;
+
     const rows = result.slice(0, 8) as Record<string, unknown>[];
-    const cols = ["name", "product_name", "sku", "quantity", "sale_price", "balance", "overdue"].filter((c) => c in rows[0]);
+
+    const cols = [
+      "name",
+      "product_name",
+      "sku",
+      "quantity",
+      "sale_price",
+      "balance",
+      "overdue",
+    ].filter((c) => c in rows[0]);
+
     return (
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full text-sm">
@@ -302,7 +535,9 @@ function ReadResult({ result }: { result: unknown }) {
               <tr key={i} className="border-b border-line last:border-0">
                 {cols.map((c) => (
                   <td key={c} className="tabular px-3 py-1.5">
-                    {["sale_price", "balance", "overdue"].includes(c) ? formatINR(String(r[c])) : String(r[c] ?? "—")}
+                    {["sale_price", "balance", "overdue"].includes(c)
+                      ? formatINR(String(r[c]))
+                      : String(r[c] ?? "—")}
                   </td>
                 ))}
               </tr>
@@ -312,7 +547,12 @@ function ReadResult({ result }: { result: unknown }) {
       </div>
     );
   }
+
   const obj = result as Record<string, unknown>;
-  if (obj.rows && Array.isArray(obj.rows)) return <ReadResult result={obj.rows} />;
+
+  if (obj.rows && Array.isArray(obj.rows)) {
+    return <ReadResult result={obj.rows} />;
+  }
+
   return null;
 }

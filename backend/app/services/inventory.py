@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from decimal import Decimal
+import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -7,10 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import Ctx
 from app.core.errors import Conflict, InsufficientStock, NotFound, ValidationFailed
-from app.enums import MovementType
-from app.models import Category, Product, StockMovement
+from app.enums import MovementType, Role
+from app.models import Category, Product, StockMovement, User
 from app.schemas.catalog import ProductCreate, ProductUpdate, StockAdjustmentIn
 from app.services.common import get_scoped
+from app.services.email import send_email
+
+logger = logging.getLogger(__name__)
 
 
 def lock_products(db: Session, shop_id: int, product_ids: Iterable[int]) -> dict[int, Product]:
@@ -18,17 +22,95 @@ def lock_products(db: Session, shop_id: int, product_ids: Iterable[int]) -> dict
     ids = sorted(set(product_ids))
     if not ids:
         return {}
+
     rows = db.scalars(
         select(Product)
         .where(Product.shop_id == shop_id, Product.id.in_(ids))
         .order_by(Product.id)
         .with_for_update(of=Product)
     ).all()
+
     found = {p.id: p for p in rows}
     missing = [i for i in ids if i not in found]
+
     if missing:
         raise NotFound(f"product(s) {missing} not found")
+
     return found
+
+
+def _send_stock_alert(
+    db: Session,
+    product: Product,
+    old_qty: int,
+    new_qty: int,
+) -> None:
+    """Send an email when a product crosses into low-stock or out-of-stock status."""
+
+    alert_type: str | None = None
+
+    # Product becomes completely out of stock.
+    if old_qty > 0 and new_qty == 0:
+        alert_type = "Out of Stock"
+
+    # Product crosses from above the threshold into low stock.
+    elif (
+        old_qty > product.low_stock_threshold
+        and new_qty > 0
+        and new_qty <= product.low_stock_threshold
+    ):
+        alert_type = "Low Stock"
+
+    if alert_type is None:
+        return
+
+    recipients = db.scalars(
+        select(User.email).where(
+            User.shop_id == product.shop_id,
+            User.role.in_([Role.owner, Role.manager]),
+            User.is_active.is_(True),
+        )
+    ).all()
+
+    if not recipients:
+        return
+
+    subject = f"{alert_type} Alert: {product.name}"
+
+    if alert_type == "Out of Stock":
+        body = (
+            f"Stock Alert\n\n"
+            f"Product: {product.name}\n"
+            f"SKU: {product.sku}\n"
+            f"Current quantity: {new_qty}\n"
+            f"Status: Out of Stock\n\n"
+            f"Please restock this product."
+        )
+    else:
+        body = (
+            f"Stock Alert\n\n"
+            f"Product: {product.name}\n"
+            f"SKU: {product.sku}\n"
+            f"Current quantity: {new_qty}\n"
+            f"Low-stock threshold: {product.low_stock_threshold}\n"
+            f"Status: Low Stock\n\n"
+            f"Please consider restocking this product."
+        )
+
+    for recipient in recipients:
+        try:
+            send_email(
+                recipient=recipient,
+                subject=subject,
+                body=body,
+            )
+        except Exception:
+            # Email failure must not break the stock operation.
+            logger.exception(
+                "Failed to send stock alert email to %s for product %s",
+                recipient,
+                product.id,
+            )
 
 
 def apply_movement(
@@ -44,16 +126,26 @@ def apply_movement(
     unit_cost: Decimal | None = None,
 ) -> StockMovement:
     """Change stock of an already-locked product and append the matching immutable movement."""
+
     if delta == 0:
         raise ValidationFailed("stock movement must change the quantity")
-    new_qty = product.quantity + delta
+
+    old_qty = product.quantity
+    new_qty = old_qty + delta
+
     if new_qty < 0:
         raise InsufficientStock(
             f"insufficient stock for {product.sku}: available {product.quantity}, requested {-delta}",
-            extra={"product_id": product.id, "sku": product.sku, "available": product.quantity,
-                   "requested": -delta},
+            extra={
+                "product_id": product.id,
+                "sku": product.sku,
+                "available": product.quantity,
+                "requested": -delta,
+            },
         )
+
     product.quantity = new_qty
+
     movement = StockMovement(
         shop_id=product.shop_id,
         product_id=product.id,
@@ -66,19 +158,39 @@ def apply_movement(
         unit_cost=unit_cost,
         created_by=user_id,
     )
+
     db.add(movement)
+
+    _send_stock_alert(
+        db,
+        product,
+        old_qty,
+        new_qty,
+    )
+
     return movement
 
 
 def _check_category(ctx: Ctx, category_id: int | None) -> None:
     if category_id is not None:
-        get_scoped(ctx.db, Category, category_id, ctx.shop_id, label="category")
+        get_scoped(
+            ctx.db,
+            Category,
+            category_id,
+            ctx.shop_id,
+            label="category",
+        )
 
 
 def _sku_taken(ctx: Ctx, sku: str, exclude_id: int | None = None) -> bool:
-    stmt = select(func.count()).where(Product.shop_id == ctx.shop_id, func.lower(Product.sku) == sku.lower())
+    stmt = select(func.count()).where(
+        Product.shop_id == ctx.shop_id,
+        func.lower(Product.sku) == sku.lower(),
+    )
+
     if exclude_id is not None:
         stmt = stmt.where(Product.id != exclude_id)
+
     return ctx.db.scalar(stmt) > 0
 
 
@@ -88,18 +200,35 @@ def _flush_unique(ctx: Ctx, sku: str) -> None:
             ctx.db.flush()
     except IntegrityError as exc:
         if "uq_products_shop_sku" in str(exc.orig):
-            raise Conflict(f"SKU '{sku}' already exists in this shop", code="sku_taken") from exc
+            raise Conflict(
+                f"SKU '{sku}' already exists in this shop",
+                code="sku_taken",
+            ) from exc
         raise
 
 
 def create_product(ctx: Ctx, data: ProductCreate) -> Product:
     _check_category(ctx, data.category_id)
+
     if _sku_taken(ctx, data.sku):
-        raise Conflict(f"SKU '{data.sku}' already exists in this shop", code="sku_taken")
+        raise Conflict(
+            f"SKU '{data.sku}' already exists in this shop",
+            code="sku_taken",
+        )
+
     fields = data.model_dump(exclude={"opening_quantity"})
-    product = Product(shop_id=ctx.shop_id, quantity=0, is_active=True, **fields)
+
+    product = Product(
+        shop_id=ctx.shop_id,
+        quantity=0,
+        is_active=True,
+        **fields,
+    )
+
     ctx.db.add(product)
+
     _flush_unique(ctx, data.sku)
+
     if data.opening_quantity:
         apply_movement(
             ctx.db,
@@ -110,48 +239,113 @@ def create_product(ctx: Ctx, data: ProductCreate) -> Product:
             reason="Opening balance",
             unit_cost=data.cost_price,
         )
+
     ctx.db.flush()
+
     return product
 
 
 def update_product(ctx: Ctx, product_id: int, data: ProductUpdate) -> Product:
-    product = get_scoped(ctx.db, Product, product_id, ctx.shop_id, lock=True, label="product")
+    product = get_scoped(
+        ctx.db,
+        Product,
+        product_id,
+        ctx.shop_id,
+        lock=True,
+        label="product",
+    )
+
     changes = data.model_dump(exclude_unset=True)
+
     if "category_id" in changes:
         _check_category(ctx, changes["category_id"])
-    if changes.get("sku") and _sku_taken(ctx, changes["sku"], exclude_id=product.id):
-        raise Conflict(f"SKU '{changes['sku']}' already exists in this shop", code="sku_taken")
-    for key in ("name", "sku", "unit", "sale_price", "gst_rate", "low_stock_threshold", "reorder_quantity"):
+
+    if changes.get("sku") and _sku_taken(
+        ctx,
+        changes["sku"],
+        exclude_id=product.id,
+    ):
+        raise Conflict(
+            f"SKU '{changes['sku']}' already exists in this shop",
+            code="sku_taken",
+        )
+
+    for key in (
+        "name",
+        "sku",
+        "unit",
+        "sale_price",
+        "gst_rate",
+        "low_stock_threshold",
+        "reorder_quantity",
+    ):
         if key in changes and changes[key] is None:
             raise ValidationFailed(f"{key} cannot be null")
+
     for key, value in changes.items():
         setattr(product, key, value)
+
     _flush_unique(ctx, product.sku)
+
     return product
 
 
 def set_active(ctx: Ctx, product_id: int, active: bool) -> Product:
-    product = get_scoped(ctx.db, Product, product_id, ctx.shop_id, lock=True, label="product")
+    product = get_scoped(
+        ctx.db,
+        Product,
+        product_id,
+        ctx.shop_id,
+        lock=True,
+        label="product",
+    )
+
     product.is_active = active
     ctx.db.flush()
+
     return product
 
 
 def adjust_stock(ctx: Ctx, data: StockAdjustmentIn) -> StockMovement:
-    product = lock_products(ctx.db, ctx.shop_id, [data.product_id])[data.product_id]
+    product = lock_products(
+        ctx.db,
+        ctx.shop_id,
+        [data.product_id],
+    )[data.product_id]
+
     if not product.is_active:
-        raise ValidationFailed("cannot adjust stock of an archived product", code="product_archived")
+        raise ValidationFailed(
+            "cannot adjust stock of an archived product",
+            code="product_archived",
+        )
+
     mtype = MovementType(data.movement_type)
+
     if mtype == MovementType.correction:
         delta = data.counted_quantity - product.quantity  # type: ignore[operator]
+
         if delta == 0:
-            raise ValidationFailed("counted quantity equals current stock; nothing to correct", code="no_change")
+            raise ValidationFailed(
+                "counted quantity equals current stock; nothing to correct",
+                code="no_change",
+            )
+
     elif mtype == MovementType.manual_increase:
         delta = data.quantity  # type: ignore[assignment]
+
     else:
         delta = -data.quantity  # type: ignore[operator]
+
     movement = apply_movement(
-        ctx.db, product, mtype, delta, user_id=ctx.user.id, reason=data.reason, reference_type="adjustment"
+        ctx.db,
+        product,
+        mtype,
+        delta,
+        user_id=ctx.user.id,
+        reason=data.reason,
+        reference_type="adjustment",
     )
+
     ctx.db.flush()
+
     return movement
