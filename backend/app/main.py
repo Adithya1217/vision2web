@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, auth, catalog, purchasing, reports, sales
+from app.api import ai, auth, catalog, purchasing, reports, sales, voice
 from app.config import get_settings
 from app.core.errors import AppError, IdempotentReplay, app_error_handler, replay_handler
 
@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(IdempotentReplay, replay_handler)
-    for module in (auth, catalog, sales, purchasing, reports, ai):
+    for module in (auth, catalog, sales, purchasing, reports, ai, voice):
         app.include_router(module.router, prefix="/api/v1")
 
     @app.get("/healthz", tags=["meta"])

@@ -1,9 +1,9 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { api } from "@/lib/api";
+import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useSubmitter } from "@/lib/hooks";
 
 // Shared by the command bar and simple mode: interpret text, then run the proposed API calls only after
@@ -64,6 +64,23 @@ type Recognition = {
   stop: () => void;
 };
 
+// Sarvam speech goes through our API (the key stays on the server); these calls send audio, not JSON.
+async function voiceFetch(path: string, init: RequestInit): Promise<Response> {
+  const token = getToken();
+  const res = await fetch(API_URL + path, {
+    ...init,
+    headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new ApiError(res.status, "Voice service failed", "voice_failed");
+  return res;
+}
+
+// Spoken phrases repeat ("How did they pay?"), so keep their audio instead of paying for it again.
+// ponytail: simple size cap, no LRU; fine for a session's worth of short prompts.
+const ttsCache = new Map<string, string>();
+
+const MAX_RECORDING_MS = 12_000;
+
 export function useAssistant({ onDone }: { onDone?: (title: string) => void } = {}) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,20 +90,34 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const recRef = useRef<Recognition | null>(null);
+  const mediaRef = useRef<MediaRecorder | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speakTurn = useRef(0);
+  // After any Sarvam failure, use the browser's own speech for the rest of the session.
+  const [sarvamFailed, setSarvamFailed] = useState(false);
+  const voiceStatus = useQuery({
+    queryKey: ["voice", "status"],
+    queryFn: () => api.get<{ sarvam: boolean }>("/voice/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
+  const sarvam = !!voiceStatus.data?.sarvam && !sarvamFailed;
   // A draft created before its post failed: retrying posts it instead of creating a second draft.
   const draftRef = useRef<{ id: number; grand_total: string } | null>(null);
   const submitter = useSubmitter();
   const qc = useQueryClient();
 
-  const speechSupported =
+  const browserStt =
     typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  const browserTts = typeof window !== "undefined" && "speechSynthesis" in window;
+  const canRecord =
+    typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
+  const voiceEngine: "sarvam" | "browser" = sarvam && canRecord ? "sarvam" : "browser";
+  const speechSupported = voiceEngine === "sarvam" || browserStt;
+  const ttsSupported = sarvam || browserTts;
 
-  const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
-
-  // Text-to-speech: reads a message aloud; a new message interrupts the previous one.
-  const speak = (message: string) => {
-    if (!ttsSupported || !message.trim()) return;
-    window.speechSynthesis.cancel();
+  const browserSpeak = (message: string) => {
+    if (!browserTts) return setSpeaking(false);
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = "en-IN";
     utterance.onstart = () => setSpeaking(true);
@@ -96,9 +127,41 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
   };
 
   const stopSpeaking = () => {
-    if (!ttsSupported) return;
-    window.speechSynthesis.cancel();
+    speakTurn.current += 1; // any Sarvam audio still downloading is dropped when it arrives
+    audioRef.current?.pause();
+    if (browserTts) window.speechSynthesis.cancel();
     setSpeaking(false);
+  };
+
+  // Text-to-speech: Sarvam voice when configured, else the browser's. A new message interrupts the last.
+  const speak = async (message: string) => {
+    if (!message.trim()) return;
+    stopSpeaking();
+    const turn = speakTurn.current;
+    if (!sarvam) return browserSpeak(message);
+    setSpeaking(true);
+    try {
+      let url = ttsCache.get(message);
+      if (!url) {
+        const res = await voiceFetch("/voice/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: message }),
+        });
+        url = URL.createObjectURL(await res.blob());
+        if (ttsCache.size > 50) ttsCache.clear();
+        ttsCache.set(message, url);
+      }
+      if (turn !== speakTurn.current) return; // interrupted while downloading
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setSpeaking(false);
+      await audio.play();
+    } catch {
+      if (turn !== speakTurn.current) return;
+      setSarvamFailed(true);
+      browserSpeak(message);
+    }
   };
 
   const interpret = async (value = text) => {
@@ -121,8 +184,10 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
   const listen = (transform: (said: string) => string = (s) => s) => {
     if (listening) {
       recRef.current?.stop();
+      if (mediaRef.current?.state === "recording") mediaRef.current.stop();
       return;
     }
+    if (voiceEngine === "sarvam") return recordForSarvam(transform);
     const W = window as unknown as Record<string, new () => Recognition>;
     const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
     if (!Ctor) return;
@@ -141,8 +206,57 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
     rec.start();
   };
 
+  // Records until the mic is tapped again (or MAX_RECORDING_MS), then Sarvam transcribes it.
+  const recordForSarvam = async (transform: (said: string) => string) => {
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError(new ApiError(0, "Microphone permission is needed to speak commands.", "mic_denied"));
+      return;
+    }
+    const recorder = new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    const cap = setTimeout(() => recorder.state === "recording" && recorder.stop(), MAX_RECORDING_MS);
+    recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    recorder.onstop = async () => {
+      clearTimeout(cap);
+      stream.getTracks().forEach((t) => t.stop());
+      setListening(false);
+      if (mediaRef.current !== recorder) return; // cancelled by stopListening
+      const clip = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      setBusy(true);
+      try {
+        const res = await voiceFetch("/voice/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": clip.type },
+          body: clip,
+        });
+        const said = ((await res.json()) as { text: string }).text;
+        if (!said) {
+          setBusy(false);
+          setError(new ApiError(0, "I didn't catch that. Tap the mic and try again.", "no_speech"));
+          return;
+        }
+        setText(said);
+        await interpret(transform(said));
+      } catch {
+        setBusy(false);
+        setSarvamFailed(true);
+        setError(new ApiError(0, "Voice service is unavailable, so I switched to the built-in voice. Tap the mic again.", "voice_failed"));
+      }
+    };
+    mediaRef.current = recorder;
+    recorder.start();
+    setListening(true);
+  };
+
   const stopListening = () => {
     recRef.current?.stop();
+    const recorder = mediaRef.current;
+    mediaRef.current = null; // tells onstop this was a cancel, not a finished command
+    if (recorder?.state === "recording") recorder.stop();
     setListening(false);
   };
 
@@ -205,6 +319,6 @@ export function useAssistant({ onDone }: { onDone?: (title: string) => void } = 
 
   return {
     text, setText, busy, error, out, done, listening, speechSupported, interpret, listen, stopListening, confirm, reset,
-    speaking, ttsSupported, speak, stopSpeaking,
+    speaking, ttsSupported, speak, stopSpeaking, voiceEngine,
   };
 }

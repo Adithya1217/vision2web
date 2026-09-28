@@ -35,3 +35,6 @@ services:
       # Optional free alternative (Google AI Studio key), used when no Anthropic key is set.
       - key: MSME_GEMINI_API_KEY
         sync: false
+      # Optional: Sarvam speech-to-text and text-to-speech; the browser's built-in speech is used without it.
+      - key: MSME_SARVAM_API_KEY
+        sync: false

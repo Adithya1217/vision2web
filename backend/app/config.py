@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # free-tier model name if this one is retired.
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
+    # Sarvam speech (Indian-language STT/TTS). Unset = the browser's built-in speech is used.
+    sarvam_api_key: str | None = None
+    sarvam_stt_model: str = "saaras:v3"
+    sarvam_tts_model: str = "bulbul:v3"
+    sarvam_tts_language: str = "en-IN"
+    sarvam_tts_speaker: str | None = None  # None = the model's default voice
 
     # Stock alert emails via Resend. Unset key = alerts are skipped.
     resend_api_key: str = ""

@@ -239,5 +239,7 @@ Backend settings come from environment variables with the `MSME_` prefix (see `b
 - `MSME_CORS_ORIGINS`
 - `MSME_ANTHROPIC_API_KEY` and `MSME_ANTHROPIC_MODEL` (optional)
 - `MSME_GEMINI_API_KEY` and `MSME_GEMINI_MODEL` (optional; used when no Anthropic key is set)
+- `MSME_SARVAM_API_KEY` (optional; Sarvam voice input and read-aloud, proxied by `/api/v1/voice/*`; without it
+  the browser's built-in speech is used, and any Sarvam failure falls back to it too)
 
 The frontend needs only `NEXT_PUBLIC_API_URL`.

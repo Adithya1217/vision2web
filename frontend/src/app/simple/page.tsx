@@ -184,7 +184,11 @@ export default function SimplePage() {
                 </button>
               )}
             </div>
-            {a.listening && <p className="mt-2 text-base font-semibold">Listening… speak now</p>}
+            {a.listening && (
+              <p className="mt-2 text-base font-semibold">
+                {a.voiceEngine === "sarvam" ? "Listening… tap the mic again when you’re done" : "Listening… speak now"}
+              </p>
+            )}
             {a.text.trim() && (
               <BigButton type="submit" className="mt-3 w-full bg-butter">
                 Go
