@@ -11,6 +11,7 @@ import random
 from decimal import Decimal
 
 import app.services.invoicing as invoicing
+from app.config import get_settings
 from app.core.deps import Ctx
 from app.db import SessionLocal
 from app.enums import PaymentMethod, Role
@@ -51,6 +52,8 @@ PASSWORD = os.environ.get("MSME_DEMO_PASSWORD", "").strip()
 
 def main():
     global PASSWORD
+    # Seeding replays weeks of sales; stock crossing thresholds in that history must not send real alert emails.
+    get_settings().resend_api_key = ""
     if not PASSWORD:
         if os.environ.get("MSME_ENVIRONMENT") == "production":
             print("MSME_DEMO_PASSWORD is not set; skipping demo data in production.")
