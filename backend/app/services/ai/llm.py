@@ -1,16 +1,19 @@
-"""Optional Claude-backed intent extraction.
+"""Optional LLM-backed intent extraction: Claude if ``MSME_ANTHROPIC_API_KEY`` is set, otherwise Gemini if
+``MSME_GEMINI_API_KEY`` is set.
 
-Enabled only when ``MSME_ANTHROPIC_API_KEY`` is set. The model returns a ``ParsedIntent`` via structured
-outputs; any error, refusal or invalid output falls back to the deterministic rule parser. The model never
-sees database contents and never performs actions.
+The model returns a ``ParsedIntent`` via structured output; any error, refusal or invalid output falls back
+to the deterministic rule parser. The model only sees the command text, never database contents, and never
+performs actions.
 """
 
 from __future__ import annotations
 
 import logging
 
+from pydantic import BaseModel
+
 from app.config import get_settings
-from app.services.ai.parser import ParsedIntent
+from app.services.ai.parser import Entities, Intent, ParsedIntent
 
 log = logging.getLogger(__name__)
 
@@ -25,8 +28,63 @@ low_stock, out_of_stock, khata with a period), or unknown."""
 
 def parse_with_llm(text: str) -> ParsedIntent | None:
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    if settings.anthropic_api_key:
+        return _parse_with_claude(text)
+    if settings.gemini_api_key:
+        return _parse_with_gemini(text)
+    return None
+
+
+def _parse_with_gemini(text: str) -> ParsedIntent | None:
+    settings = get_settings()
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:  # pragma: no cover - optional dependency
+        log.warning("google-genai package not installed; using rule parser")
         return None
+    try:
+        client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=10_000))
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=text,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM,
+                response_mime_type="application/json",
+                response_schema=_gemini_schema(),
+                temperature=0,
+            ),
+        )
+        # Re-validate against our own model rather than trusting the provider's parsing.
+        parsed = ParsedIntent.model_validate_json(response.text or "")
+        parsed.source, parsed.confidence = "llm", 0.9
+        return parsed
+    except Exception as exc:  # quota, timeout, network, bad JSON: the rule parser is the fallback
+        log.warning("Gemini intent parsing failed (%s); using rule parser", exc.__class__.__name__)
+        return None
+
+
+class _GeminiIntent(BaseModel):
+    """What Gemini fills in; confidence and source are ours to set."""
+
+    intent: Intent
+    entities: Entities
+
+
+def _gemini_schema() -> dict:
+    """Our JSON schema minus keywords Gemini rejects ("quantity > 0"); ParsedIntent re-checks them on the reply."""
+    def strip(node: object) -> object:
+        if isinstance(node, dict):
+            return {k: strip(v) for k, v in node.items() if k != "exclusiveMinimum"}
+        if isinstance(node, list):
+            return [strip(v) for v in node]
+        return node
+
+    return strip(_GeminiIntent.model_json_schema())
+
+
+def _parse_with_claude(text: str) -> ParsedIntent | None:
+    settings = get_settings()
     try:
         import anthropic
     except ImportError:  # pragma: no cover - optional dependency

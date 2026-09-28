@@ -13,4 +13,5 @@ pytest>=8
 ruff>=0.6
 email-validator>=2.2
 anthropic>=1.0  # optional: enables the LLM intent parser
+google-genai>=2.25  # optional: free Gemini alternative for the intent parser
 resend>=2.48.0

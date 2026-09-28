@@ -179,8 +179,8 @@ uses it to hide navigation and buttons (`GET /api/v1/auth/me` returns the caller
 
 ### AI and voice assistant
 - `POST /api/v1/ai/interpret` parses text with a deterministic rule parser (English and common Hinglish).
-  If `MSME_ANTHROPIC_API_KEY` is set, it uses Claude via structured outputs instead, and falls back to the
-  rules on any error.
+  If `MSME_ANTHROPIC_API_KEY` is set, it uses Claude via structured outputs instead; otherwise, if
+  `MSME_GEMINI_API_KEY` is set, it uses Gemini (free tier works). Either falls back to the rules on any error.
 - Supported intents: product lookup, stock receipt, stock adjustment, invoice draft, payment, khata lookup,
   and report summaries.
 - **Read** intents run straight away through the normal read services.
@@ -238,5 +238,6 @@ Backend settings come from environment variables with the `MSME_` prefix (see `b
 - `MSME_ACCESS_TOKEN_MINUTES`
 - `MSME_CORS_ORIGINS`
 - `MSME_ANTHROPIC_API_KEY` and `MSME_ANTHROPIC_MODEL` (optional)
+- `MSME_GEMINI_API_KEY` and `MSME_GEMINI_MODEL` (optional; used when no Anthropic key is set)
 
 The frontend needs only `NEXT_PUBLIC_API_URL`.

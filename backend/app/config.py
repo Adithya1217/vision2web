@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # Optional LLM for the AI command layer. When unset, a deterministic rule parser is used.
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5"
+    # Free alternative: Google Gemini (used when no Anthropic key is set). Check AI Studio for the current
+    # free-tier model name if this one is retired.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
 
     # Stock alert emails via Resend. Unset key = alerts are skipped.
     resend_api_key: str = ""

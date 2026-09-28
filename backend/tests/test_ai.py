@@ -31,6 +31,23 @@ from tests.conftest import make_customer, make_product, sell
     ("top products by units this month", "report_summary",
      lambda e: (e.report, e.metric, e.period) == ("top_products", "quantity", "this_month")),
     ("what is low stock", "report_summary", lambda e: e.report == "low_stock"),
+    # Hinglish and everyday phrasings a shopkeeper actually uses.
+    ("2 maggi 1 atta ramesh ko", "invoice_draft",
+     lambda e: e.customer_query == "ramesh"
+     and [(i.query, i.quantity) for i in e.items] == [("maggi", 2), ("atta", 1)]),
+    ("Ramesh ko 2 sabun dedo, udhaar", "invoice_draft",
+     lambda e: e.customer_query == "ramesh" and [(i.query, i.quantity) for i in e.items] == [("sabun", 2)]),
+    ("ramesh ka hisaab", "khata_lookup", lambda e: e.customer_query == "ramesh"),
+    ("how much maggi left", "product_lookup", lambda e: e.product_query == "maggi"),
+    ("maggi kitna bacha", "product_lookup", lambda e: e.product_query == "maggi"),
+    ("10 atta aaya", "stock_receipt", lambda e: [(i.query, i.quantity) for i in e.items] == [("atta", 10)]),
+    ("what's low on stock", "report_summary", lambda e: e.report == "low_stock"),
+    ("ramesh ne 500 diye", "payment_record", lambda e: (e.customer_query, e.amount) == ("ramesh", "500.00")),
+    ("add new product biscuit 10 rupees", "unknown", lambda e: True),
+    # Simple mode's tiles prepend "bill"/"received"; Hinglish phrasing must survive that.
+    ("bill ramesh ko 2 sabun dedo", "invoice_draft",
+     lambda e: e.customer_query == "ramesh" and [(i.query, i.quantity) for i in e.items] == [("sabun", 2)]),
+    ("received 10 atta aaya", "stock_receipt", lambda e: [(i.query, i.quantity) for i in e.items] == [("atta", 10)]),
     ("sing me a song", "unknown", lambda e: True),
 ])
 def test_rule_parser(text, intent, check):

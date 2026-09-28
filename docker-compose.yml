@@ -20,6 +20,7 @@ services:
       MSME_JWT_SECRET: ${MSME_JWT_SECRET:-change-me-in-production}
       MSME_CORS_ORIGINS: '["http://localhost:3000"]'
       MSME_ANTHROPIC_API_KEY: ${MSME_ANTHROPIC_API_KEY:-}
+      MSME_GEMINI_API_KEY: ${MSME_GEMINI_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

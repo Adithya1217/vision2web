@@ -32,3 +32,6 @@ services:
       # Optional: enables the Claude-backed assistant parser. Leave blank to use the rule parser.
       - key: MSME_ANTHROPIC_API_KEY
         sync: false
+      # Optional free alternative (Google AI Studio key), used when no Anthropic key is set.
+      - key: MSME_GEMINI_API_KEY
+        sync: false

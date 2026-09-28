@@ -120,6 +120,10 @@ def parse_items(fragment: str) -> list[ItemRef]:
     return [i for i in items if i.query]
 
 
+def _strip_credit(text: str) -> str:
+    return re.sub(r"\b(?:udhaar|udhar|on credit|khate me|khata me)\b", " ", text)
+
+
 def _period(low: str) -> str | None:
     table = [
         (r"\byesterday|kal\b", "yesterday"),
@@ -139,6 +143,20 @@ def parse(text: str) -> ParsedIntent:
     raw = text.strip()
     low = raw.lower()
     ents = Entities()
+
+    # "Ramesh ko 2 sabun dedo" / "2 maggi 1 atta ramesh ko": Hinglish sale to a customer, with or without a
+    # leading "bill"/"sell" (simple mode's Sell tile adds one).
+    ko = re.sub(r"^(?:create |make |new )?(?:bill|invoice|sell|sale|billing)\s+", "", low)
+    m = re.match(r"^([a-z][\w .'-]*?)\s+ko\s+(.+?)\s+(?:de ?do|de diya|diya|dena|bech ?do|becho|bech diya)\b", ko) \
+        or re.match(r"^([a-z][\w .'-]*?)\s+ko\s+(\d.*)$", ko)
+    if m:
+        ents.customer_query, ents.items = _clean(m.group(1)), parse_items(_strip_credit(m.group(2)))
+        return ParsedIntent(intent="invoice_draft", entities=ents, confidence=0.75 if ents.items else 0.4)
+    # ponytail: takes the one word before "ko" as the name; "2 maggi ramesh kumar ko" needs "bill ... for" instead.
+    m = re.match(r"^(\d.*)\s+([a-z][a-z.'-]*)\s+ko\b", ko)
+    if m:
+        ents.customer_query, ents.items = _clean(m.group(2)), parse_items(m.group(1))
+        return ParsedIntent(intent="invoice_draft", entities=ents, confidence=0.75 if ents.items else 0.4)
 
     # ---------------------------------------------------------------- invoice draft
     m = re.match(r"^(?:create |make |new )?(?:bill|invoice|sell|sale|billing)\b(?:\s+(?:for|of))?\s*(.*)$", low)
@@ -177,9 +195,13 @@ def parse(text: str) -> ParsedIntent:
 
     # ---------------------------------------------------------------- stock receipt
     m = re.match(r"^(?:received|receive|got|restock|restocked|stock in|add stock|add|aaya|aaye)\b\s*(?:stock\s+)?(.*)$",
-                 low)
-    if m and m.group(1):
+                 low) or re.match(r"^()(\d.*?)\s+(?:aaya|aaye|aa gaya|aa gaye|arrived|came in|came|received)$", low)
+    if m and m.lastindex == 2:  # quantity first, arrival verb last: "10 atta aaya"
+        ents.items, ents.reason = parse_items(m.group(2)), "Stock received (assistant)"
+        return ParsedIntent(intent="stock_receipt", entities=ents, confidence=0.8 if ents.items else 0.4)
+    if m and m.group(1) and not re.match(r"^(?:new\s+)?(?:product|item|customer|supplier|staff|user)\b", m.group(1)):
         body = re.sub(r"\bfrom\s+[a-z][\w .'-]*$", "", m.group(1))
+        body = re.sub(r"\s+(?:aaya|aaye|aa gaya|aa gaye|arrived|came in|came)$", "", body)
         ents.items = parse_items(body)
         ents.reason = "Stock received (assistant)"
         return ParsedIntent(intent="stock_receipt", entities=ents, confidence=0.8 if ents.items else 0.4)
@@ -202,8 +224,9 @@ def parse(text: str) -> ParsedIntent:
         return ParsedIntent(intent="payment_record", entities=ents, confidence=0.8 if ok else 0.4)
 
     # ---------------------------------------------------------------- khata
-    if re.search(r"\b(khata|udhar|udhaar|owe|owes|balance|outstanding|dues?|baki|baaki)\b", low):
-        cust = (re.search(r"\b(?:khata|balance|dues?|outstanding|udhar|udhaar|baki)\s+(?:of|for)\s+(.+)$", low)
+    if re.search(r"\b(khata|udhar|udhaar|owe|owes|balance|outstanding|dues?|baki|baaki|hisaab|hisab)\b", low):
+        cust = (re.match(r"^(.+?)\s+(?:ka|ki|ke)\s+(?:khata|hisaab|hisab|udhar|udhaar|baki|baaki)\b", low)
+                or re.search(r"\b(?:khata|balance|dues?|outstanding|udhar|udhaar|baki)\s+(?:of|for)\s+(.+)$", low)
                 or re.match(r"^(?:how much does |how much )?(.+?)(?:'s)?\s+(?:owe|owes|khata|balance|dues?|udhar|baki)",
                             low)
                 or re.search(r"\b(?:does|do)\s+(.+?)\s+owe", low))
@@ -214,7 +237,7 @@ def parse(text: str) -> ParsedIntent:
         return ParsedIntent(intent="khata_lookup", entities=ents, confidence=0.8 if ents.customer_query else 0.6)
 
     # ---------------------------------------------------------------- reports
-    if re.search(r"\b(low stock|running low|reorder)\b", low):
+    if re.search(r"\b(low stock|running low|reorder|low on stock|stock low|stock kam|kam hai|what'?s low)\b", low):
         ents.report = "low_stock"
         return ParsedIntent(intent="report_summary", entities=ents, confidence=0.85)
     if re.search(r"\b(out of stock|stock ?out|khatam)\b", low):
@@ -234,7 +257,9 @@ def parse(text: str) -> ParsedIntent:
     m = re.match(lookup, low) \
         or re.match(r"^(?:stock|price|rate|quantity)\s+(?:of|for)\s+(.+)$", low) \
         or re.match(r"^how many\s+(.+?)(?:\s+(?:do we have|left|in stock|are there))?\??$", low) \
-        or re.match(r"^do we have\s+(?:any\s+)?(.+?)\??$", low)
+        or re.match(r"^do we have\s+(?:any\s+)?(.+?)\??$", low) \
+        or re.match(r"^how much\s+(.+?)\s+(?:is\s+)?(?:left|remaining|in stock|bacha|bache)\??$", low) \
+        or re.match(r"^(.+?)\s+kitn[aei]\s+(?:hai|bacha|bache|bachi|stock)\??$", low)
     if m:
         ents.product_query = _clean(m.group(1))
         return ParsedIntent(intent="product_lookup", entities=ents, confidence=0.75)
