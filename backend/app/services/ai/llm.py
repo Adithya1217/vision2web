@@ -43,25 +43,33 @@ def _parse_with_gemini(text: str) -> ParsedIntent | None:
     except ImportError:  # pragma: no cover - optional dependency
         log.warning("google-genai package not installed; using rule parser")
         return None
-    try:
-        client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=10_000))
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=text,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM,
-                response_mime_type="application/json",
-                response_schema=_gemini_schema(),
-                temperature=0,
-            ),
-        )
-        # Re-validate against our own model rather than trusting the provider's parsing.
-        parsed = ParsedIntent.model_validate_json(response.text or "")
-        parsed.source, parsed.confidence = "llm", 0.9
-        return parsed
-    except Exception as exc:  # quota, timeout, network, bad JSON: the rule parser is the fallback
-        log.warning("Gemini intent parsing failed (%s); using rule parser", exc.__class__.__name__)
-        return None
+    # Gemini rejects deadlines under 10s (400 "deadline is too short"), so this is the minimum, in ms.
+    client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=10_000))
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM,
+        response_mime_type="application/json",
+        response_schema=_gemini_schema(),
+        temperature=0,
+    )
+    # The free tier often answers "busy" (429/503) for one model while another is free, so try a second one.
+    models = [settings.gemini_model, *([GEMINI_BACKUP_MODEL] if settings.gemini_model != GEMINI_BACKUP_MODEL else [])]
+    for model in models:
+        try:
+            response = client.models.generate_content(model=model, contents=text, config=config)
+            # Re-validate against our own model rather than trusting the provider's parsing.
+            parsed = ParsedIntent.model_validate_json(response.text or "")
+            parsed.source, parsed.confidence = "llm", 0.9
+            return parsed
+        except Exception as exc:  # quota, timeout, network, bad JSON: the rule parser is the fallback
+            busy = getattr(exc, "code", None) in (429, 500, 502, 503, 504) or "Timeout" in exc.__class__.__name__
+            log.warning("Gemini %s failed (%s %s)", model, exc.__class__.__name__, getattr(exc, "code", ""))
+            if not busy:
+                break
+    log.warning("Gemini unavailable; using rule parser")
+    return None
+
+
+GEMINI_BACKUP_MODEL = "gemini-flash-latest"
 
 
 class _GeminiIntent(BaseModel):

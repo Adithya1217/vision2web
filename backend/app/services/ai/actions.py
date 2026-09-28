@@ -26,9 +26,29 @@ from app.services import reports, tax
 from app.services.ai.llm import parse_with_llm
 from app.services.ai.parser import ParsedIntent, parse
 
-
 # ------------------------------------------------------------------ resolution
+# Spoken Hindi for everyday stock; tried only when the words as said match nothing ("sabun" -> "Lux Soap").
+# ponytail: a fixed word list; per-shop aliases on products would be the upgrade.
+HINDI_PRODUCT_WORDS = {
+    "sabun": "soap", "sabu": "soap", "chawal": "rice", "chaawal": "rice", "cheeni": "sugar", "chini": "sugar",
+    "shakkar": "sugar", "tel": "oil", "dal": "dal", "daal": "dal", "chai": "tea", "chai patti": "tea",
+    "chaipatti": "tea", "namak": "salt", "doodh": "milk", "biskut": "biscuit", "manjan": "toothpaste",
+    "shampu": "shampoo", "namkeen": "bhujia", "kaafi": "coffee", "kofi": "coffee", "atta": "atta", "aata": "atta",
+}
+
+
 def find_products(ctx: Ctx, query: str, limit: int = 5) -> list[Product]:
+    found = _find_products(ctx, query, limit)
+    if not found:
+        english = HINDI_PRODUCT_WORDS.get(query.lower()) or " ".join(
+            HINDI_PRODUCT_WORDS.get(w, w) for w in query.lower().split()
+        )
+        if english != query.lower():
+            found = _find_products(ctx, english, limit)
+    return found
+
+
+def _find_products(ctx: Ctx, query: str, limit: int) -> list[Product]:
     base = select(Product).where(Product.shop_id == ctx.shop_id, Product.is_active.is_(True))
     exact = ctx.db.scalars(base.where(or_(func.lower(Product.sku) == query.lower(),
                                           func.lower(Product.name) == query.lower()))).all()

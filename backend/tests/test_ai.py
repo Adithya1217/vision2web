@@ -48,6 +48,11 @@ from tests.conftest import make_customer, make_product, sell
     ("bill ramesh ko 2 sabun dedo", "invoice_draft",
      lambda e: e.customer_query == "ramesh" and [(i.query, i.quantity) for i in e.items] == [("sabun", 2)]),
     ("received 10 atta aaya", "stock_receipt", lambda e: [(i.query, i.quantity) for i in e.items] == [("atta", 10)]),
+    # Spoken numbers, as Sarvam transcribes them.
+    ("Sunita ko teen Maggi de do", "invoice_draft",
+     lambda e: e.customer_query == "sunita" and [(i.query, i.quantity) for i in e.items] == [("maggi", 3)]),
+    ("bill teen maggi aur ek parle-g for sunita", "invoice_draft",
+     lambda e: [(i.query, i.quantity) for i in e.items] == [("maggi", 3), ("parle-g", 1)]),
     ("sing me a song", "unknown", lambda e: True),
 ])
 def test_rule_parser(text, intent, check):
@@ -125,3 +130,12 @@ def test_proposal_flags_problems(owner, staff):
 def test_staff_cannot_read_sales_via_assistant(staff):
     out = _interpret(staff, "sales today")
     assert out["result"] is None and "don't have access" in out["message"]
+
+
+def test_hindi_product_words_find_english_names(owner):
+    make_product(owner, sku="LUX-1", name="Lux Soap 4x100g")
+    make_product(owner, sku="RICE-5", name="Basmati Rice 5kg")
+    out = owner.ok(owner.post("/ai/interpret", {"text": "bill 2 sabun and 1 chawal", "use_llm": False}))
+    assert out["proposal"]["ready"], out["proposal"]["warnings"]
+    assert any("Lux Soap" in line for line in out["proposal"]["summary"])
+    assert any("Basmati Rice" in line for line in out["proposal"]["summary"])

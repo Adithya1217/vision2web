@@ -98,7 +98,24 @@ def _method(text: str) -> str | None:
     return None
 
 
+# Spoken quantities (Sarvam writes "teen maggi", not "3 maggi"). Only an item's first word is read as a
+# number, because "do" is also the verb in "de do", which the sale rules strip before items are parsed.
+_NUMBER_WORDS = {
+    "ek": 1, "one": 1, "do": 2, "two": 2, "teen": 3, "three": 3, "char": 4, "chaar": 4, "four": 4,
+    "paanch": 5, "panch": 5, "five": 5, "chhe": 6, "che": 6, "six": 6, "saat": 7, "seven": 7,
+    "aath": 8, "eight": 8, "nau": 9, "nine": 9, "das": 10, "dus": 10, "ten": 10,
+}
+_NUMBER_WORD = re.compile(
+    rf"(?:(?<=^)|(?<=,)|(?<=\band\b)|(?<=\baur\b))(\s*)({'|'.join(_NUMBER_WORDS)})\s+(?=[a-z])", re.I
+)
+
+
+def _digits(fragment: str) -> str:
+    return _NUMBER_WORD.sub(lambda m: f"{m.group(1)}{_NUMBER_WORDS[m.group(2).lower()]} ", fragment)
+
+
 def parse_items(fragment: str) -> list[ItemRef]:
+    fragment = _digits(fragment.strip())
     items = []
     chunks = []
     for chunk in re.split(r",|\band\b|\baur\b|&|\+", fragment, flags=re.I):
