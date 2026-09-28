@@ -38,3 +38,9 @@ services:
       # Optional: Sarvam speech-to-text and text-to-speech; the browser's built-in speech is used without it.
       - key: MSME_SARVAM_API_KEY
         sync: false
+      # Optional: low-stock / out-of-stock emails to owners and managers via Resend. Without a verified
+      # domain, the default sender only delivers to the email address of your Resend account.
+      - key: MSME_RESEND_API_KEY
+        sync: false
+      - key: MSME_RESEND_FROM
+        value: onboarding@resend.dev
