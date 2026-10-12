@@ -24,8 +24,9 @@ Open http://localhost:3000. The seed creates `owner@demo.example.com`, `manager@
 
 ### Deploy live on Render (free tier)
 
-`render.yaml` is a Render Blueprint. It creates a free Postgres database and one free web service built
-from `deploy/Dockerfile`. That container runs Next.js on the public port and FastAPI on
+`render.yaml` is a Render Blueprint. It creates one free web service built from `deploy/Dockerfile`; the
+Postgres database is external (a free [Neon](https://neon.tech) project works well), and you paste its
+direct connection string into `MSME_DATABASE_URL`. That container runs Next.js on the public port and FastAPI on
 `127.0.0.1:8000`, and Next.js forwards `/api/*` to FastAPI, so there is a single origin and no CORS setup.
 
 1. Open https://render.com/deploy?repo=https://github.com/Adithya1217/vision2web and sign in with GitHub.
@@ -53,7 +54,7 @@ MSME_DATABASE_URL='<external database URL>' MSME_DEMO_PASSWORD='<your demo passw
 Free-tier limits:
 - The service sleeps after about 15 minutes without traffic, so the first request after that takes
   about a minute.
-- Render's free Postgres expires after 30 days unless you upgrade it.
+- A free Neon database sleeps when idle and wakes on the next request (about a second).
 
 ### Local development
 
