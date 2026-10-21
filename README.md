@@ -1,4 +1,4 @@
-# Dukaan Desk: multi-tenant MSME business dashboard
+#Multi-tenant MSME business dashboard
 
 Inventory, GST invoicing, payments and khata (customer credit), purchasing, reporting, and a
 confirmation-gated AI/voice assistant for small Indian businesses.
